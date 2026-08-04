@@ -1,0 +1,3805 @@
+<!doctype html>
+<html lang="th" data-theme="business">
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>OCR-STA-SK</title><!-- Edit  -->
+  <script src="/public/js/socket.io.js"></script>
+  <link href="/public/css/styles.min.css" rel="stylesheet">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Noto+Sans+Thai:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    /* ================= Design tokens ================= */
+    :root {
+      --bg-0: #09090b;
+      --bg-1: #0e0e11;
+      --surface: #131317;
+      --surface-2: #18181d;
+      --surface-3: #1f1f26;
+      --line: #2c2c35;
+      --line-soft: #232329;
+      --text-1: #ededf2;
+      --text-2: #a7a7b1;
+      --text-3: #6d6d78;
+      --accent-1: #71717a;
+      --accent-2: #b8b8c2;
+      --grad-accent: linear-gradient(135deg, #3f3f46 0%, #71717a 50%, #b4b4be 100%);
+      --ok: #34d399;
+      --warn: #fbbf24;
+      --err: #fb7185;
+      --info: #7dd3fc;
+      --radius-lg: 1.1rem;
+      --radius-md: .8rem;
+      --radius-sm: .55rem;
+      --font-ui: 'Inter', 'Noto Sans Thai', system-ui, 'Segoe UI', sans-serif;
+      --font-mono: 'JetBrains Mono', 'Cascadia Code', Consolas, monospace;
+      --sidebar-w: 72px;
+      --panel-w: 420px;
+    }
+
+    /* ================= Base ================= */
+    html { font-family: var(--font-ui); }
+
+    body {
+      font-family: var(--font-ui);
+      color: var(--text-1);
+      background:
+        radial-gradient(1100px 700px at 88% -10%, rgba(255, 255, 255, .05), transparent 60%),
+        radial-gradient(900px 600px at -8% 108%, rgba(255, 255, 255, .035), transparent 55%),
+        var(--bg-0);
+      background-attachment: fixed;
+      -webkit-font-smoothing: antialiased;
+      letter-spacing: .005em;
+    }
+
+    ::selection { background: rgba(113, 113, 122, .45); }
+
+    /* Text cursor / selection only on editable fields */
+    body { cursor: default; user-select: none; }
+
+    input:not([type="checkbox"]):not([type="range"]):not([type="file"]):not([type="hidden"]),
+    textarea {
+      cursor: text;
+      user-select: text;
+    }
+
+    *::-webkit-scrollbar { width: 10px; height: 10px; }
+    *::-webkit-scrollbar-track { background: transparent; }
+    *::-webkit-scrollbar-thumb { background: var(--surface-3); border-radius: 8px; border: 2px solid var(--bg-0); }
+    *::-webkit-scrollbar-thumb:hover { background: var(--line); }
+
+    /* ================= Icons ================= */
+    .icon {
+      width: 1.15em;
+      height: 1.15em;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 2;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      flex: none;
+      display: inline-block;
+      vertical-align: -0.18em;
+    }
+
+    .icon-sm { width: .95em; height: .95em; }
+    .icon-lg { width: 1.5em; height: 1.5em; }
+
+    /* ================= Buttons ================= */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: .5rem;
+      border-radius: var(--radius-md);
+      font-family: var(--font-ui);
+      font-weight: 600;
+      letter-spacing: .01em;
+      text-transform: none;
+      transition: all .18s ease;
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn .icon { width: 1.05em; height: 1.05em; }
+
+    .btn-grad {
+      border: none;
+      background-image: var(--grad-accent);
+      color: #fff;
+    }
+
+    .btn-grad:hover {
+      background-image: var(--grad-accent);
+      filter: brightness(1.12);
+      box-shadow: 0 6px 18px rgba(0, 0, 0, .5);
+      color: #fff;
+    }
+
+    .btn-outline { border-color: var(--line); color: var(--text-2); }
+    .btn-outline:hover { background: var(--surface-3); border-color: var(--line); color: var(--text-1); }
+
+    /* compat: legacy class names used by JS templates */
+    .modern-btn { border-radius: var(--radius-md); }
+    .modern-input, .modern-select { border-radius: var(--radius-md); }
+
+    /* ================= Form controls ================= */
+    .input, .select, .textarea, .file-input {
+      background: var(--surface-3);
+      border-color: var(--line);
+      color: var(--text-1);
+      border-radius: var(--radius-md);
+      font-family: var(--font-ui);
+      transition: border-color .15s ease, box-shadow .15s ease;
+    }
+
+    .input:focus, .select:focus, .textarea:focus, .file-input:focus {
+      outline: none;
+      border-color: var(--accent-1);
+      box-shadow: 0 0 0 3px rgba(148, 148, 160, .22);
+    }
+
+    .input::placeholder, .textarea::placeholder { color: var(--text-3); }
+
+    .label-text, .label-text-alt { color: var(--text-2); font-family: var(--font-ui); }
+
+    .field-label {
+      display: flex;
+      align-items: center;
+      gap: .45rem;
+      font-size: .8rem;
+      font-weight: 600;
+      color: var(--text-2);
+      margin-bottom: .45rem;
+    }
+
+    .field-label .icon { width: 1em; height: 1em; color: var(--text-3); }
+
+    .field-hint { font-size: .72rem; color: var(--text-3); margin-top: .35rem; }
+
+    .input-icon-wrap { position: relative; }
+
+    .input-icon-wrap > .icon {
+      position: absolute;
+      left: .85rem;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-3);
+      pointer-events: none;
+      width: 1rem;
+      height: 1rem;
+    }
+
+    .input-icon-wrap > .input { padding-left: 2.5rem; width: 100%; }
+
+    /* ================= Sidebar rail ================= */
+    .sidebar {
+      position: fixed;
+      left: 0;
+      top: 0;
+      height: 100vh;
+      width: var(--sidebar-w);
+      background: linear-gradient(180deg, #151519 0%, #0b0b0e 100%);
+      border-right: 1px solid var(--line-soft);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: .85rem .5rem;
+      gap: .3rem;
+      z-index: 50;
+    }
+
+    .sidebar-logo {
+      width: 44px;
+      height: 44px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: .8rem;
+      border-radius: var(--radius-md);
+      background: var(--surface-2);
+      border: 1px solid var(--line-soft);
+    }
+
+    .sidebar-logo img { width: 34px; height: 34px; object-fit: contain; }
+
+    .sidebar-nav {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .3rem;
+      width: 100%;
+    }
+
+    .sidebar-item {
+      width: 44px;
+      height: 44px;
+      border-radius: var(--radius-md);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      color: var(--text-2);
+      background: transparent;
+      border: 1px solid transparent;
+      transition: all .18s ease;
+      position: relative;
+    }
+
+    .sidebar-item .icon { width: 20px; height: 20px; }
+
+    .sidebar-item:hover {
+      color: #fff;
+      background: var(--surface-3);
+      border-color: var(--line-soft);
+    }
+
+    .sidebar-item.active {
+      color: #fff;
+      background-image: var(--grad-accent);
+      border-color: transparent;
+      box-shadow: 0 4px 14px rgba(0, 0, 0, .5);
+    }
+
+    .sidebar-item.locked {
+      cursor: not-allowed;
+      opacity: .45;
+    }
+
+    .sidebar-item.locked:hover {
+      background: transparent;
+      border-color: transparent;
+      color: var(--text-2);
+    }
+
+    .sidebar-item.locked::after {
+      content: '';
+      position: absolute;
+      top: -3px;
+      right: -3px;
+      width: 15px;
+      height: 15px;
+      border-radius: 50%;
+      border: 2px solid var(--bg-0);
+      background: var(--err) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='white' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='3' y='11' width='18' height='11' rx='2'/%3E%3Cpath d='M7 11V7a5 5 0 0 1 10 0v4'/%3E%3C/svg%3E") center/8px no-repeat;
+    }
+
+    .sidebar-footer {
+      margin-top: auto;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .5rem;
+      width: 100%;
+    }
+
+    .user-info {
+      width: 100%;
+      text-align: center;
+      color: var(--text-2);
+      background: var(--surface-2);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-sm);
+      padding: .35rem .2rem;
+      font-size: .62rem;
+      line-height: 1.3;
+      overflow: hidden;
+    }
+
+    .user-info .font-semibold {
+      color: var(--text-1);
+      font-size: .66rem;
+      font-weight: 600;
+      word-wrap: break-word;
+    }
+
+    .logout-icon {
+      color: #fda4af;
+      background: rgba(244, 63, 94, .1);
+      border-color: rgba(244, 63, 94, .22);
+    }
+
+    .logout-icon:hover {
+      color: #fff;
+      background: rgba(244, 63, 94, .25);
+      border-color: rgba(244, 63, 94, .4);
+    }
+
+    .tooltip {
+      position: absolute;
+      left: 56px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: var(--surface-3);
+      border: 1px solid var(--line);
+      color: var(--text-1);
+      padding: .35rem .7rem;
+      border-radius: var(--radius-sm);
+      font-size: .72rem;
+      font-weight: 500;
+      white-space: nowrap;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .18s ease;
+      z-index: 100;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, .35);
+    }
+
+    .sidebar-item:hover .tooltip { opacity: 1; }
+
+    /* ================= Settings panel ================= */
+    .settings-sidebar {
+      position: fixed;
+      left: var(--sidebar-w);
+      top: 0;
+      height: 100vh;
+      width: var(--panel-w);
+      background: var(--bg-1);
+      border-right: 1px solid var(--line-soft);
+      z-index: 40;
+      transform: translateX(-110%);
+      transition: transform .28s ease;
+      overflow-y: auto;
+      box-shadow: 12px 0 30px rgba(0, 0, 0, .35);
+    }
+
+    .settings-sidebar.show { transform: translateX(0); }
+
+    .panel-head {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: .9rem;
+      padding: .25rem .25rem 1.2rem;
+      margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .panel-head img {
+      width: 44px;
+      height: 44px;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+    }
+
+    .panel-head-sub {
+      font-size: .68rem;
+      font-weight: 500;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-top: .1rem;
+    }
+
+    .modern-title {
+      font-weight: 800;
+      letter-spacing: -.02em;
+      background-image: var(--grad-accent);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+      color: transparent;
+    }
+
+    .section-card {
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-lg);
+      padding: 1.25rem 1.25rem 1.35rem;
+    }
+
+    .section-title {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-size: .68rem;
+      font-weight: 700;
+      letter-spacing: .13em;
+      text-transform: uppercase;
+      color: var(--text-2);
+      margin-bottom: .95rem;
+    }
+
+    .section-title .icon { width: .95rem; height: .95rem; color: var(--accent-2); }
+
+    .toggle-row {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: .7rem;
+    }
+
+    .toggle-tile {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: .6rem;
+      background: var(--surface-2);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      padding: .8rem .4rem .9rem;
+    }
+
+    .tile-name {
+      font-size: .74rem;
+      font-weight: 600;
+      color: var(--text-2);
+      letter-spacing: .02em;
+    }
+
+    .switch-line {
+      display: flex;
+      align-items: center;
+      gap: .75rem;
+      font-size: .84rem;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+
+    .range-label {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: .78rem;
+      font-weight: 600;
+      color: var(--text-2);
+      margin-bottom: .4rem;
+    }
+
+    .range-label span {
+      font-family: var(--font-mono);
+      font-size: .68rem;
+      font-weight: 600;
+      color: var(--accent-2);
+      background: rgba(255, 255, 255, .05);
+      border: 1px solid rgba(255, 255, 255, .14);
+      border-radius: .4rem;
+      padding: .08rem .45rem;
+      min-width: 2.7rem;
+      text-align: center;
+    }
+
+    .crop-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: .6rem;
+    }
+
+    .crop-cell .field-label { justify-content: center; margin-bottom: .3rem; font-family: var(--font-mono); font-size: .7rem; }
+    .crop-cell .input { text-align: center; font-family: var(--font-mono); padding-left: .5rem; padding-right: .5rem; }
+
+    .path-chip {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      margin-top: .6rem;
+      background: var(--surface-2);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-sm);
+      padding: .5rem .7rem;
+      font-size: .7rem;
+      color: var(--text-3);
+    }
+
+    .path-chip .icon { color: var(--accent-2); width: .95rem; height: .95rem; }
+    .path-chip code { font-family: var(--font-mono); color: var(--text-2); word-break: break-all; }
+
+    .readonly-chip {
+      position: absolute;
+      top: 0;
+      right: 0;
+      display: inline-flex;
+      align-items: center;
+      gap: .4rem;
+      background: rgba(244, 63, 94, .12);
+      border: 1px solid rgba(244, 63, 94, .3);
+      color: #fda4af;
+      padding: .3rem .65rem;
+      border-radius: 999px;
+      font-size: .68rem;
+      font-weight: 600;
+      z-index: 5;
+    }
+
+    /* ================= Main content ================= */
+    .main-content {
+      margin-left: var(--sidebar-w);
+      transition: margin-left .28s ease;
+    }
+
+    .main-content.expanded { margin-left: var(--sidebar-w); }
+
+    .main-content.with-settings { margin-left: calc(var(--sidebar-w) + var(--panel-w)); }
+
+    .content-grid {
+      height: 100vh;
+      padding: 1.5rem;
+      display: flex;
+      flex-direction: column;
+      gap: 1.25rem;
+    }
+
+    .viewer-row {
+      flex: 2;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.1rem;
+    }
+
+    .viewer-card {
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .viewer-head {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .8rem 1.1rem;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .viewer-head .icon { color: var(--accent-2); width: 1.05rem; height: 1.05rem; }
+
+    .viewer-head h2 {
+      font-size: .82rem;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--text-1);
+    }
+
+    .viewer-body {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: .9rem;
+      background: #0b0b0e;
+    }
+
+    .viewer-body img {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+    }
+
+    .weight-chip {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      gap: .45rem;
+      background: var(--surface-3);
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: .28rem .75rem;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+
+    .weight-chip .icon { color: var(--accent-2); width: .85rem; height: .85rem; }
+
+    .log-card {
+      flex: 1;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      background: #0c0c0f;
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .log-head {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .7rem 1.1rem;
+      background: var(--surface-2);
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .log-head .icon { color: var(--ok); width: 1rem; height: 1rem; }
+
+    .log-head h2 {
+      font-size: .78rem;
+      font-weight: 700;
+      letter-spacing: .09em;
+      text-transform: uppercase;
+      color: var(--text-1);
+    }
+
+    .log-body {
+      flex: 1;
+      min-height: 0;
+      overflow-y: auto;
+      padding: .8rem 1.1rem;
+      font-family: var(--font-mono);
+      font-size: .74rem;
+      color: #7ee2a8;
+    }
+
+    .log-body > div {
+      padding: .18rem 0;
+      border-bottom: 1px dashed rgba(148, 163, 184, .08);
+      line-height: 1.55;
+      word-break: break-word;
+    }
+
+    /* ================= Modals ================= */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 8, 16, .72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(6px);
+      padding: 1rem;
+    }
+
+    .modal-overlay.show { display: flex; }
+
+    .modal-content {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--text-1);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      max-width: 800px;
+      width: 95%;
+      max-height: 90vh;
+      overflow-y: auto;
+      animation: modalSlideIn .25s ease;
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, .6);
+    }
+
+    .modal-content.large { max-width: 1000px; }
+
+    @keyframes modalSlideIn {
+      from { opacity: 0; transform: scale(.96) translateY(-14px); }
+      to { opacity: 1; transform: scale(1) translateY(0); }
+    }
+
+    .modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(4, 8, 16, .72);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 1000;
+      backdrop-filter: blur(6px);
+      overflow-y: auto;
+      padding: 1rem;
+    }
+
+    .modal.modal-open { display: flex !important; }
+
+    .modal-box {
+      background: var(--surface);
+      border: 1px solid var(--line);
+      color: var(--text-1);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem;
+      animation: modalSlideIn .25s ease;
+      box-shadow: 0 30px 60px -15px rgba(0, 0, 0, .6);
+      position: relative;
+      max-height: 90vh;
+      overflow-y: auto;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding-bottom: 1rem;
+      margin-bottom: 1.4rem;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .modal-title {
+      display: flex;
+      align-items: center;
+      gap: .65rem;
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--text-1);
+      letter-spacing: -.01em;
+    }
+
+    .modal-title .icon { width: 1.3rem; height: 1.3rem; color: var(--accent-2); }
+
+    .modal-close {
+      width: 34px;
+      height: 34px;
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-2);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all .15s ease;
+      flex: none;
+    }
+
+    .modal-close:hover {
+      background: var(--surface-3);
+      border-color: var(--line);
+      color: #fff;
+    }
+
+    .modal-close .icon { width: 1rem; height: 1rem; }
+
+    /* ================= Callouts ================= */
+    .callout {
+      border-radius: var(--radius-md);
+      border: 1px solid var(--line-soft);
+      background: var(--surface-2);
+      padding: .85rem 1rem;
+      font-size: .8rem;
+      color: var(--text-2);
+    }
+
+    .callout-head {
+      display: flex;
+      align-items: center;
+      gap: .5rem;
+      font-weight: 700;
+      font-size: .8rem;
+      margin-bottom: .45rem;
+      color: var(--text-1);
+    }
+
+    .callout-head .icon { width: 1rem; height: 1rem; }
+
+    .callout-info { background: rgba(56, 189, 248, .06); border-color: rgba(56, 189, 248, .25); }
+    .callout-info .callout-head { color: #7dd3fc; }
+
+    .callout-warn { background: rgba(251, 191, 36, .06); border-color: rgba(251, 191, 36, .28); }
+    .callout-warn .callout-head { color: #fcd34d; }
+
+    .callout strong { color: var(--text-1); }
+
+    /* ================= Tables ================= */
+    .table-wrap {
+      background: var(--surface);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+    }
+
+    .table thead tr {
+      background: var(--surface-2);
+      color: var(--text-2);
+      font-size: .68rem;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .table :where(th, td) { border-color: var(--line-soft); }
+
+    .table-zebra tbody tr:nth-child(even) { background: rgba(255, 255, 255, .015); }
+
+    .table tbody tr:hover { background: var(--surface-2); }
+
+    .avatar-chip {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-md);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-weight: 700;
+      font-size: .95rem;
+      flex: none;
+    }
+
+    .avatar-chip.admin { background-image: var(--grad-accent); }
+    .avatar-chip.user { background: var(--surface-3); border: 1px solid var(--line); color: var(--text-2); }
+
+    .role-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      border-radius: 999px;
+      padding: .28rem .7rem;
+      font-size: .7rem;
+      font-weight: 600;
+    }
+
+    .role-badge .icon { width: .8rem; height: .8rem; }
+    .role-badge.admin { background: rgba(255, 255, 255, .08); border: 1px solid rgba(255, 255, 255, .25); color: #d4d4dc; }
+    .role-badge.user { background: var(--surface-3); border: 1px solid var(--line); color: var(--text-2); }
+
+    /* ================= Gallery ================= */
+    .gallery-item { transition: transform .18s ease; }
+    .gallery-item:hover { transform: translateY(-3px); }
+
+    .g-thumb {
+      aspect-ratio: 1;
+      background: var(--surface-2);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+    }
+
+    .g-thumb img { width: 100%; height: 100%; object-fit: cover; transition: transform .25s ease; }
+    .gallery-item:hover .g-thumb img { transform: scale(1.06); }
+
+    .g-name { font-size: .7rem; font-weight: 600; color: var(--text-1); }
+    .g-meta { font-size: .64rem; color: var(--text-3); font-family: var(--font-mono); }
+
+    /* ================= OCR test ================= */
+    .dropzone {
+      background: var(--surface);
+      border: 1.5px dashed var(--line);
+      border-radius: var(--radius-lg);
+      padding: 1.75rem 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 1rem;
+      text-align: center;
+    }
+
+    .dropzone-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: var(--radius-md);
+      background: var(--surface-3);
+      border: 1px solid var(--line);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-2);
+    }
+
+    .dropzone-icon .icon { width: 24px; height: 24px; }
+
+    .result-card {
+      background: var(--surface-2);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .result-card.ok { border-color: rgba(52, 211, 153, .35); }
+    .result-card.fail { border-color: rgba(251, 113, 133, .4); }
+
+    .result-thumb {
+      background: #0b0b0e;
+      padding: .6rem;
+    }
+
+    .result-thumb img {
+      width: 100%;
+      height: 11rem;
+      object-fit: contain;
+      border-radius: var(--radius-sm);
+    }
+
+    .result-body { padding: .8rem .9rem .9rem; display: flex; flex-direction: column; gap: .55rem; }
+
+    .result-name {
+      display: flex;
+      align-items: center;
+      gap: .45rem;
+      font-size: .76rem;
+      font-weight: 600;
+      color: var(--text-1);
+      min-width: 0;
+    }
+
+    .result-name .icon { width: .95rem; height: .95rem; }
+    .result-name.ok .icon { color: var(--ok); }
+    .result-name.fail .icon { color: var(--err); }
+    .result-name span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+    .det-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      background: rgba(52, 211, 153, .1);
+      border: 1px solid rgba(52, 211, 153, .35);
+      color: #6ee7b7;
+      border-radius: .45rem;
+      padding: .25rem .55rem;
+      font-family: var(--font-mono);
+      font-size: .72rem;
+      font-weight: 600;
+    }
+
+    .det-badge .icon { width: .8rem; height: .8rem; }
+    .det-badge small { opacity: .65; font-size: .62rem; }
+
+    /* ================= Toast / notification ================= */
+    .app-toast {
+      position: fixed;
+      top: 1rem;
+      right: 1rem;
+      z-index: 2000;
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-left: 3px solid var(--info);
+      color: var(--text-1);
+      padding: .8rem 1.1rem;
+      border-radius: var(--radius-md);
+      font-size: .82rem;
+      font-weight: 500;
+      box-shadow: 0 14px 34px rgba(0, 0, 0, .45);
+      max-width: 24rem;
+    }
+
+    .app-toast .icon { width: 1.05rem; height: 1.05rem; flex: none; }
+    .app-toast.toast-success { border-left-color: var(--ok); }
+    .app-toast.toast-success .icon { color: var(--ok); }
+    .app-toast.toast-error { border-left-color: var(--err); }
+    .app-toast.toast-error .icon { color: var(--err); }
+    .app-toast.toast-warning { border-left-color: var(--warn); }
+    .app-toast.toast-warning .icon { color: var(--warn); }
+    .app-toast.toast-info .icon { color: var(--info); }
+
+    .app-toast .toast-close {
+      margin-left: .4rem;
+      background: none;
+      border: none;
+      color: var(--text-3);
+      cursor: pointer;
+      font-size: 1rem;
+      line-height: 1;
+    }
+
+    .app-toast .toast-close:hover { color: var(--text-1); }
+
+    /* ================= Mention dropdown ================= */
+    .mention-panel {
+      background: var(--surface-2);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-md);
+      box-shadow: 0 18px 40px rgba(0, 0, 0, .5);
+      overflow: hidden;
+    }
+
+    .mention-item {
+      display: flex;
+      align-items: center;
+      gap: .6rem;
+      padding: .55rem .8rem;
+      cursor: pointer;
+      border-bottom: 1px solid var(--line-soft);
+    }
+
+    .mention-item:last-child { border-bottom: none; }
+    .mention-item:hover { background: var(--surface-3); }
+
+    /* ================= Device health ================= */
+    .health-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: .7rem;
+    }
+
+    .health-tile {
+      background: var(--surface-2);
+      border: 1px solid var(--line-soft);
+      border-radius: var(--radius-md);
+      padding: .7rem .85rem .8rem;
+    }
+
+    .health-tile.wide { grid-column: span 2; }
+
+    .health-label {
+      font-size: .62rem;
+      font-weight: 700;
+      letter-spacing: .1em;
+      text-transform: uppercase;
+      color: var(--text-3);
+      margin-bottom: .3rem;
+    }
+
+    .health-value {
+      font-family: var(--font-mono);
+      font-size: .95rem;
+      font-weight: 600;
+      color: var(--text-1);
+    }
+
+    .health-value small {
+      font-size: .68rem;
+      font-weight: 500;
+      color: var(--text-3);
+    }
+
+    .meter {
+      margin-top: .45rem;
+      height: 6px;
+      background: var(--surface-3);
+      border-radius: 999px;
+      overflow: hidden;
+    }
+
+    .meter-fill {
+      height: 100%;
+      border-radius: 999px;
+      background: #8f8f99;
+      transition: width .4s ease;
+    }
+
+    .meter-fill.warn { background: var(--warn); }
+    .meter-fill.crit { background: var(--err); }
+
+    .health-refresh {
+      width: 26px;
+      height: 26px;
+      border-radius: var(--radius-sm);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-3);
+      background: transparent;
+      border: 1px solid transparent;
+      cursor: pointer;
+      transition: all .15s ease;
+    }
+
+    .health-refresh:hover {
+      color: var(--text-1);
+      background: var(--surface-3);
+      border-color: var(--line);
+    }
+
+    .health-refresh .icon { width: .85rem; height: .85rem; }
+
+    /* ================= daisyUI tweaks ================= */
+    /* business theme ships square corners - restore pill shapes */
+    .toggle { border-radius: 1.9rem; }
+    .toggle-primary:checked {
+      background-color: #9a9aa4;
+      border-color: #9a9aa4;
+      color: #9a9aa4;
+    }
+
+    .range { border-radius: 1rem; }
+    .range::-webkit-slider-thumb { border-radius: 1rem; }
+    .range::-moz-range-thumb { border-radius: 1rem; }
+    .range-primary { color: #b4b4be; --range-shdw: #71717a; }
+
+
+    .alert {
+      border-radius: var(--radius-md);
+      border: 1px solid rgba(56, 189, 248, .25);
+      background: rgba(56, 189, 248, .06);
+      color: var(--text-1);
+    }
+
+    .divider::before, .divider::after { background-color: var(--line-soft); }
+
+    .badge { font-family: var(--font-ui); font-weight: 600; }
+
+    .card { border-radius: var(--radius-md); }
+
+    /* ================= Responsive ================= */
+    @media (max-width: 1200px) {
+      .main-content.with-settings { margin-left: var(--sidebar-w); }
+    }
+
+    @media (max-width: 900px) {
+      .viewer-row { grid-template-columns: 1fr; }
+      .content-grid { height: auto; min-height: 100vh; }
+      .viewer-card { min-height: 260px; }
+      .log-card { min-height: 220px; }
+    }
+  </style>
+</head>
+
+<body class="min-h-screen">
+  <!-- SVG icon sprite (single-color, stroke = currentColor) -->
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></symbol>
+    <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></symbol>
+    <symbol id="i-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+    <symbol id="i-user" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></symbol>
+    <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></symbol>
+    <symbol id="i-scan" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><line x1="7" y1="12" x2="17" y2="12"/></symbol>
+    <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></symbol>
+    <symbol id="i-video" viewBox="0 0 24 24"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2"/></symbol>
+    <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></symbol>
+    <symbol id="i-terminal" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/></symbol>
+    <symbol id="i-weight" viewBox="0 0 24 24"><circle cx="12" cy="5" r="3"/><path d="M6.5 8a2 2 0 0 0-1.9 1.46L2.1 18.5A2 2 0 0 0 4 21h16a2 2 0 0 0 1.9-2.5L19.4 9.46A2 2 0 0 0 17.5 8Z"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></symbol>
+    <symbol id="i-cpu" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/><line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/><line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><line x1="4" y1="21" x2="4" y2="14"/><line x1="4" y1="10" x2="4" y2="3"/><line x1="12" y1="21" x2="12" y2="12"/><line x1="12" y1="8" x2="12" y2="3"/><line x1="20" y1="21" x2="20" y2="16"/><line x1="20" y1="12" x2="20" y2="3"/><line x1="1" y1="14" x2="7" y2="14"/><line x1="9" y1="8" x2="15" y2="8"/><line x1="17" y1="16" x2="23" y2="16"/></symbol>
+    <symbol id="i-crop" viewBox="0 0 24 24"><path d="M6.13 1L6 16a2 2 0 0 0 2 2h15"/><path d="M1 6.13L16 6a2 2 0 0 1 2 2v15"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></symbol>
+    <symbol id="i-archive" viewBox="0 0 24 24"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></symbol>
+    <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+    <symbol id="i-type" viewBox="0 0 24 24"><polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/><line x1="12" y1="4" x2="12" y2="20"/></symbol>
+    <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+    <symbol id="i-upload" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><polygon points="5 3 19 12 5 21 5 3"/></symbol>
+    <symbol id="i-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></symbol>
+    <symbol id="i-key" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></symbol>
+    <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+    <symbol id="i-edit" viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="i-check-circle" viewBox="0 0 24 24"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></symbol>
+    <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  </svg>
+
+  <!-- Sidebar -->
+  <div class="sidebar" id="sidebar">
+    <div class="sidebar-logo">
+      <img alt="Logo" src="/public/img/glove_character.png" />
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="sidebar-item" id="settingsBtn" data-tooltip="System Settings">
+        <svg class="icon"><use href="#i-settings"/></svg>
+        <div class="tooltip">System Settings</div>
+      </div>
+
+      <div class="sidebar-item" id="networkBtn" data-tooltip="Network Settings">
+        <svg class="icon"><use href="#i-globe"/></svg>
+        <div class="tooltip">Network Settings</div>
+      </div>
+
+      <div class="sidebar-item" id="usersBtn" data-tooltip="User Management">
+        <svg class="icon"><use href="#i-users"/></svg>
+        <div class="tooltip">User Management</div>
+      </div>
+
+      <div class="sidebar-item" id="systemBtn" data-tooltip="System">
+        <svg class="icon"><use href="#i-monitor"/></svg>
+        <div class="tooltip">System</div>
+      </div>
+
+      <div class="sidebar-item" id="galleryBtn" data-tooltip="Image Gallery">
+        <svg class="icon"><use href="#i-image"/></svg>
+        <div class="tooltip">Image Gallery</div>
+      </div>
+
+      <div class="sidebar-item" id="ocrTestBtn" data-tooltip="OCR Test Tool">
+        <svg class="icon"><use href="#i-scan"/></svg>
+        <div class="tooltip">OCR Test Tool</div>
+      </div>
+    </nav>
+
+    <div class="sidebar-footer">
+      <div class="user-info" id="userInfo">
+        <div class="font-semibold text-xs">User</div>
+        <div class="text-xs opacity-60">Role</div>
+      </div>
+
+      <div class="sidebar-item logout-icon" id="logoutBtn" data-tooltip="Logout">
+        <svg class="icon"><use href="#i-logout"/></svg>
+        <div class="tooltip">Logout</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Settings Sidebar -->
+  <div class="settings-sidebar" id="settingsSidebar">
+    <form action="/" method="post" id="input_form" class="p-6">
+      <div class="panel-head">
+        <img alt="" src="/public/img/glove_character.png" />
+        <div>
+          <div class="text-2xl modern-title">
+             STA-SK<!-- Edit  -->
+          </div>
+          <div class="panel-head-sub">OCR Vision System</div>
+        </div>
+      </div>
+
+      <div class="form-control w-full mb-5">
+        <div class="field-label">
+          <svg class="icon"><use href="#i-video"/></svg>
+          Camera Name
+        </div>
+        <div class="input input-bordered flex items-center cursor-default" id="cameraDisplayName">
+          No camera selected
+        </div>
+        <input type="hidden" name="cameraName" id="cameraSelect" />
+      </div>
+
+      <div id="camera_selected_wrap" class="hidden space-y-5">
+        <!-- Operation toggles -->
+        <div class="section-card">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-play"/></svg>
+            Operation
+          </div>
+          <div class="toggle-row">
+            <div class="toggle-tile">
+              <span class="tile-name">Start</span>
+              <input type="checkbox" name="enable" class="toggle toggle-primary" />
+            </div>
+            <div class="toggle-tile">
+              <span class="tile-name">Preview</span>
+              <input type="checkbox" name="enablePreview" class="toggle toggle-primary" />
+            </div>
+            <div class="toggle-tile">
+              <span class="tile-name">OCR</span>
+              <input type="checkbox" name="enableOcr" class="toggle toggle-primary" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Storage -->
+        <div class="section-card space-y-4">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-folder"/></svg>
+            Storage
+          </div>
+          <div>
+            <label class="switch-line">
+              <input type="checkbox" name="enableWriteFile" class="toggle toggle-primary" />
+              <span>Save Images with ROI &amp; Confidence</span>
+            </label>
+            <div class="field-hint" style="margin-top:.35rem;">เก็บ 2 ไฟล์ต่อการทริก: ภาพมีกรอบ ROI (ไว้รีเช็ค) + ภาพดิบ _raw (ไว้เทรน) เฉพาะทริกที่เห็นตัวเลขจริงเท่านั้น</div>
+          </div>
+          <div>
+            <label class="switch-line">
+              <input type="checkbox" name="saveOnlyValid" class="toggle toggle-primary" />
+              <span>เก็บเฉพาะที่อ่านสำเร็จ</span>
+            </label>
+            <div class="field-hint" style="margin-top:.35rem;">ปิดไว้ = เก็บภาพที่เห็นเลขแต่อ่านไม่สำเร็จ (888/999) ด้วย เพื่อเอาไปเทรนโมเดล</div>
+          </div>
+          <div class="form-control w-full">
+            <div class="range-label">Min Confidence to Save <span></span></div>
+            <input type="range" name="saveMinConfidence" class="range range-primary range-sm" min="0" max="100" step="5" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+            <div class="field-hint">ใช้กับผลที่อ่านสำเร็จเท่านั้น (%) &mdash; 0 = เก็บทุกภาพ ภาพอ่านไม่ได้ยังถูกเก็บเสมอ</div>
+          </div>
+          <div class="form-control w-full">
+            <div class="field-label">ลบภาพเก่ากว่า (วัน)</div>
+            <input type="number" name="cleanupDays" min="0" max="365" class="input input-bordered w-full" placeholder="0" />
+            <div class="field-hint">0 = ไม่ลบอัตโนมัติ (แบ็คอัพ + ฟอร์แมตเองทุกสัปดาห์)</div>
+          </div>
+          <div class="form-control w-full">
+            <div class="field-label">หยุดเก็บเมื่อพื้นที่ว่างต่ำกว่า (%)</div>
+            <input type="number" name="minFreeDiskPercent" min="5" max="50" class="input input-bordered w-full" placeholder="10" />
+            <div class="field-hint">กันดิสก์เต็มจนโปรแกรมค้าง &mdash; ระบบหยุดเก็บภาพเองอัตโนมัติ พร้อม log แจ้งเตือน</div>
+          </div>
+          <input type="hidden" name="writeFilePath" value="/home/pi/Desktop/OCR-NEW-update/Img" />
+          <div class="path-chip">
+            <svg class="icon"><use href="#i-folder"/></svg>
+            <code>/home/pi/Desktop/OCR-NEW-update/Img</code>
+          </div>
+        </div>
+
+        <!-- PLC -->
+        <div class="section-card space-y-4">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-cpu"/></svg>
+            PLC Connection
+          </div>
+          <label class="switch-line">
+            <input type="checkbox" name="enablePlc" class="toggle toggle-primary" />
+            <span>Send to PLC</span>
+          </label>
+          <div class="form-control w-full">
+            <div class="field-label">PLC IP Address</div>
+            <input type="text" name="plcAddress" class="input input-bordered w-full" placeholder="192.168.0.1" />
+          </div>
+          <div class="form-control w-full">
+            <div class="field-label">PLC DB Num</div>
+            <input type="text" name="plcDbNum" class="input input-bordered w-full" placeholder="PLC DB Num" />
+          </div>
+        </div>
+
+        <!-- Image Processing -->
+        <div class="section-card space-y-4">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-sliders"/></svg>
+            Image Processing
+          </div>
+
+          <div class="form-control w-full">
+            <div class="range-label">Contrast <span></span></div>
+            <input type="range" name="contrast" class="range range-primary range-sm" min="-10" max="10" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+          </div>
+
+          <div class="form-control w-full">
+            <div class="range-label">Sharpness <span></span></div>
+            <input type="range" name="sharpness" class="range range-primary range-sm" min="0" max="4" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+          </div>
+
+          <div class="form-control w-full">
+            <div class="range-label">Saturation <span></span></div>
+            <input type="range" name="saturation" class="range range-primary range-sm" min="-10" max="10" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+          </div>
+
+          <div class="form-control w-full">
+            <div class="range-label">Chromadenoise <span></span></div>
+            <input type="range" name="chromadenoise" class="range range-primary range-sm" min="0" max="4" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+          </div>
+
+          <div class="form-control w-full">
+            <div class="range-label">Lumadenoise <span></span></div>
+            <input type="range" name="lumadenoise" class="range range-primary range-sm" min="0" max="4" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+          </div>
+
+          <div class="form-control w-full">
+            <div class="range-label">Auto Exposure Compensation <span></span></div>
+            <input type="range" name="autoexposurecompensation" class="range range-primary range-sm" min="-9" max="9" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+          </div>
+
+          <div class="form-control w-full">
+            <div class="range-label">Effect Mode <span></span></div>
+            <input type="range" name="effectmode" class="range range-primary range-sm" min="0" max="8" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+          </div>
+        </div>
+
+        <!-- Crop -->
+        <div class="section-card">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-crop"/></svg>
+            Crop Settings
+          </div>
+          <div class="crop-grid">
+            <div class="crop-cell">
+              <div class="field-label">X1</div>
+              <input type="text" name="cropX1" placeholder="0" class="input input-bordered w-full" />
+            </div>
+            <div class="crop-cell">
+              <div class="field-label">Y1</div>
+              <input type="text" name="cropY1" placeholder="0" class="input input-bordered w-full" />
+            </div>
+            <div class="crop-cell">
+              <div class="field-label">X2</div>
+              <input type="text" name="cropX2" placeholder="0" class="input input-bordered w-full" />
+            </div>
+            <div class="crop-cell">
+              <div class="field-label">Y2</div>
+              <input type="text" name="cropY2" placeholder="0" class="input input-bordered w-full" />
+            </div>
+          </div>
+        </div>
+
+        <!-- SAVE BUTTON -->
+        <button type="submit" class="btn btn-grad w-full mt-2">
+          <svg class="icon"><use href="#i-save"/></svg>
+          Save Settings
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Main Content -->
+  <div class="main-content expanded" id="mainContent">
+    <div class="content-grid">
+      <div class="viewer-row" id="previewWrap">
+        <section class="viewer-card">
+          <header class="viewer-head">
+            <svg class="icon"><use href="#i-video"/></svg>
+            <h2>Live Camera</h2>
+            <div class="weight-chip">
+              <svg class="icon"><use href="#i-weight"/></svg>
+              <span id="plcWeightInFrame">Weight: --</span>
+            </div>
+          </header>
+          <div class="viewer-body">
+            <img id="currentImagePreview" alt="" />
+          </div>
+        </section>
+
+        <section class="viewer-card">
+          <header class="viewer-head">
+            <svg class="icon"><use href="#i-file-text"/></svg>
+            <h2>Reading Result</h2>
+          </header>
+          <div class="viewer-body">
+            <img id="lastImagePreview" alt="" />
+          </div>
+        </section>
+      </div>
+
+      <section class="log-card">
+        <header class="log-head">
+          <svg class="icon"><use href="#i-terminal"/></svg>
+          <h2>System Logs</h2>
+        </header>
+        <div id="log_panel" class="log-body"></div>
+      </section>
+    </div>
+  </div>
+
+  <!-- Network Configuration Modal -->
+  <div class="modal-overlay" id="networkModal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2 class="modal-title">
+          <svg class="icon"><use href="#i-globe"/></svg>
+          Network Settings
+        </h2>
+        <button type="button" onclick="closeModal('networkModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <!-- Network System Info -->
+      <div class="callout callout-info mb-4">
+        <div class="callout-head">
+          <svg class="icon"><use href="#i-monitor"/></svg>
+          <span>System Information</span>
+        </div>
+        <div id="networkSystemInfo" class="text-sm">
+          Loading system information...
+        </div>
+      </div>
+
+      <!-- Persistent Configuration Warning -->
+      <div class="callout callout-warn mb-4">
+        <div class="callout-head">
+          <svg class="icon"><use href="#i-alert"/></svg>
+          <span>CRITICAL - Truly Persistent Configuration</span>
+        </div>
+        <div class="text-sm space-y-1">
+          <div>• Changes are <strong>PERMANENTLY written to system files</strong> (netplan/interfaces)</div>
+          <div>• Settings <strong>SURVIVE REBOOTS</strong> - No temporary configuration</div>
+          <div>• Web interface <strong>ALWAYS</strong> accessible on <strong>port 64010</strong></div>
+          <div>• After IP change: Access via <strong>http://NEW_IP:64010</strong></div>
+          <div class="font-medium" style="color: var(--warn);">Ensure NEW IP is accessible before applying - you may lose connection!</div>
+        </div>
+      </div>
+
+      <form id="networkForm" class="space-y-4">
+        <!-- Interface Selection -->
+        <div class="form-control">
+          <div class="field-label">Network Interface</div>
+          <select name="interface" id="networkInterface" class="select select-bordered w-full">
+            <option value="">Loading interfaces...</option>
+          </select>
+        </div>
+
+        <!-- Network Mode -->
+        <div class="form-control">
+          <div class="field-label">Network Mode</div>
+          <select name="mode" id="networkMode" class="select select-bordered w-full" onchange="toggleNetworkMode()">
+            <option value="dhcp">DHCP (Automatic)</option>
+            <option value="static">Static IP (Manual)</option>
+          </select>
+        </div>
+
+        <!-- Current Configuration Display -->
+        <div id="currentConfig" class="callout">
+          <div class="callout-head">
+            <svg class="icon"><use href="#i-wifi"/></svg>
+            <span>Current Configuration</span>
+          </div>
+          <div id="currentConfigDetails" class="text-sm">
+            Loading current configuration...
+          </div>
+        </div>
+
+        <!-- Static IP Configuration -->
+        <div id="staticConfig" class="space-y-4" style="display: none;">
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="form-control">
+              <div class="field-label">IP Address</div>
+              <input type="text" name="ip" placeholder="192.168.1.100" class="input input-bordered w-full" />
+            </div>
+
+            <div class="form-control">
+              <div class="field-label">Subnet Mask</div>
+              <input type="text" name="netmask" placeholder="255.255.255.0" class="input input-bordered w-full" />
+            </div>
+
+            <div class="form-control">
+              <div class="field-label">Gateway</div>
+              <input type="text" name="gateway" placeholder="192.168.1.1" class="input input-bordered w-full" />
+            </div>
+
+            <div class="form-control">
+              <div class="field-label">DNS Servers</div>
+              <input type="text" name="dns" placeholder="8.8.8.8, 8.8.4.4" class="input input-bordered w-full" />
+            </div>
+          </div>
+        </div>
+
+        <!-- Network Test -->
+        <div class="mt-4">
+          <button type="button" onclick="testNetworkConnectivity()" class="btn btn-outline btn-sm">
+            <svg class="icon"><use href="#i-wifi"/></svg>
+            Test Connectivity
+          </button>
+          <div id="networkTestResult" class="mt-2 text-sm"></div>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+          <button type="button" onclick="closeModal('networkModal')" class="btn btn-outline flex-1">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-grad flex-1">
+            <svg class="icon"><use href="#i-save"/></svg>
+            Save
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- User Management Modal -->
+  <div class="modal-overlay" id="usersModal">
+    <div class="modal-content large">
+      <div class="modal-head">
+        <h2 class="modal-title">
+          <svg class="icon"><use href="#i-users"/></svg>
+          User Management
+        </h2>
+        <button type="button" onclick="closeModal('usersModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <div id="usersContent">
+        <div class="text-center py-12">
+          <div class="loading loading-spinner loading-lg text-primary"></div>
+          <p class="mt-6 text-sm" style="color: var(--text-2);">Loading user data...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Add User Modal -->
+  <div class="modal-overlay" id="addUserModal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2 class="modal-title">
+          <svg class="icon"><use href="#i-plus"/></svg>
+          Add New User
+        </h2>
+        <button type="button" onclick="closeModal('addUserModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <form id="addUserForm" class="space-y-5">
+        <div class="form-control">
+          <div class="field-label">
+            <svg class="icon"><use href="#i-user"/></svg>
+            Username
+          </div>
+          <input type="text" name="username" required class="input input-bordered w-full" placeholder="Enter username" />
+          <div class="field-hint">Username must be unique and at least 3 characters</div>
+        </div>
+
+        <div class="form-control">
+          <div class="field-label">
+            <svg class="icon"><use href="#i-key"/></svg>
+            Password
+          </div>
+          <input type="password" name="password" required class="input input-bordered w-full" placeholder="Enter password" />
+          <div class="field-hint">Password must be at least 6 characters</div>
+        </div>
+
+        <div class="form-control">
+          <div class="field-label">
+            <svg class="icon"><use href="#i-key"/></svg>
+            Confirm Password
+          </div>
+          <input type="password" name="confirmPassword" required class="input input-bordered w-full" placeholder="Confirm password" />
+        </div>
+
+        <div class="form-control">
+          <div class="field-label">
+            <svg class="icon"><use href="#i-tag"/></svg>
+            Role
+          </div>
+          <select name="role" class="select select-bordered w-full">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+          <button type="button" onclick="closeModal('addUserModal')" class="btn btn-outline flex-1">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-grad flex-1">
+            <svg class="icon"><use href="#i-plus"/></svg>
+            Create User
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Edit User Modal -->
+  <div class="modal-overlay" id="editUserModal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2 class="modal-title">
+          <svg class="icon"><use href="#i-edit"/></svg>
+          Edit User
+        </h2>
+        <button type="button" onclick="closeModal('editUserModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <form id="editUserForm" class="space-y-5">
+        <input type="hidden" name="originalUsername" />
+
+        <div class="form-control">
+          <div class="field-label">
+            <svg class="icon"><use href="#i-user"/></svg>
+            Username
+          </div>
+          <input type="text" name="username" required class="input input-bordered w-full" placeholder="Enter username" />
+        </div>
+
+        <div class="form-control">
+          <div class="field-label">
+            <svg class="icon"><use href="#i-key"/></svg>
+            New Password (Optional)
+          </div>
+          <input type="password" name="password" class="input input-bordered w-full" placeholder="Leave blank to keep current password" />
+          <div class="field-hint">Only enter if you want to change the password</div>
+        </div>
+
+        <div class="form-control">
+          <div class="field-label">
+            <svg class="icon"><use href="#i-tag"/></svg>
+            Role
+          </div>
+          <select name="role" class="select select-bordered w-full">
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </select>
+        </div>
+
+        <div class="flex gap-3 mt-6">
+          <button type="button" onclick="closeModal('editUserModal')" class="btn btn-outline flex-1">
+            Cancel
+          </button>
+          <button type="submit" class="btn btn-grad flex-1">
+            <svg class="icon"><use href="#i-save"/></svg>
+            Update User
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Image Gallery Modal -->
+  <div id="galleryModal" class="modal">
+    <div class="modal-box max-w-7xl w-full max-h-screen">
+      <div class="modal-head">
+        <h3 class="modal-title">
+          <svg class="icon"><use href="#i-image"/></svg>
+          Image Gallery
+        </h3>
+        <button type="button" onclick="closeModal('galleryModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <!-- Search and Filter Tools -->
+      <div class="flex flex-wrap gap-3 mb-4 items-center">
+        <div class="input-icon-wrap flex-1 min-w-[220px]">
+          <svg class="icon"><use href="#i-search"/></svg>
+          <input
+            type="text"
+            id="imageSearchInput"
+            placeholder="ค้นหาชื่อไฟล์..."
+            class="input input-bordered w-full"
+            oninput="filterGalleryImages()"
+          />
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button onclick="sortGalleryImages('name')" class="btn btn-outline btn-sm">
+            <svg class="icon"><use href="#i-type"/></svg>
+            Name
+          </button>
+          <button onclick="sortGalleryImages('date')" class="btn btn-outline btn-sm">
+            <svg class="icon"><use href="#i-calendar"/></svg>
+            Date
+          </button>
+          <button onclick="refreshGallery()" class="btn btn-outline btn-sm">
+            <svg class="icon"><use href="#i-refresh"/></svg>
+            Refresh
+          </button>
+          <button onclick="exportGalleryImages()" class="btn btn-grad btn-sm">
+            <svg class="icon"><use href="#i-archive"/></svg>
+            Export ZIP
+          </button>
+          <button onclick="cleanupOldImages()" class="btn btn-outline btn-sm" style="color: var(--warn); border-color: rgba(251,191,36,.35);">
+            <svg class="icon"><use href="#i-trash"/></svg>
+            Cleanup
+          </button>
+        </div>
+      </div>
+
+      <!-- Image Count -->
+      <div class="mb-3 text-xs" style="color: var(--text-3);">
+        <span id="galleryImageCount">0 images</span>
+      </div>
+
+      <!-- Image Grid -->
+      <div id="galleryImageGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4 max-h-[600px] overflow-y-auto p-1">
+        <div class="col-span-full text-center py-12 opacity-50">
+          <svg class="icon mx-auto mb-4" style="width:3.5rem;height:3.5rem;"><use href="#i-image"/></svg>
+          <p>Loading images...</p>
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-5">
+        <button type="button" onclick="closeModal('galleryModal')" class="btn btn-outline">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Image Preview Modal (for full size view) -->
+  <div id="imagePreviewModal" class="modal">
+    <div class="modal-box max-w-6xl">
+      <div class="modal-head">
+        <h3 class="modal-title" id="previewImageName">Image Preview</h3>
+        <button type="button" onclick="closeModal('imagePreviewModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+      <div class="flex justify-center items-center rounded-xl p-4" style="background: #0b0b0e; border: 1px solid var(--line-soft);">
+        <img id="previewImage" src="" alt="Preview" class="max-w-full max-h-[70vh] object-contain rounded-lg" />
+      </div>
+      <div class="flex justify-between items-center mt-5">
+        <button onclick="downloadCurrentImage()" class="btn btn-grad btn-sm">
+          <svg class="icon"><use href="#i-download"/></svg>
+          Download
+        </button>
+        <button onclick="closeModal('imagePreviewModal')" class="btn btn-outline btn-sm">
+          Close
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- OCR Test Tool Modal -->
+  <div id="ocrTestModal" class="modal">
+    <div class="modal-box max-w-7xl w-full max-h-screen">
+      <div class="modal-head">
+        <h3 class="modal-title">
+          <svg class="icon"><use href="#i-scan"/></svg>
+          OCR Test Tool
+        </h3>
+        <button type="button" onclick="closeModal('ocrTestModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <!-- Upload Section -->
+      <div class="dropzone mb-6">
+        <div class="dropzone-icon">
+          <svg class="icon"><use href="#i-upload"/></svg>
+        </div>
+        <div>
+          <h4 class="text-base font-semibold mb-1">อัพโหลดภาพเพื่อทดสอบการอ่าน OCR</h4>
+          <p class="text-xs" style="color: var(--text-3);">รองรับไฟล์: JPG, PNG, JPEG (สามารถอัพโหลดหลายไฟล์พร้อมกัน)</p>
+        </div>
+
+        <div class="w-full max-w-md">
+          <input
+            type="file"
+            id="ocrTestFileInput"
+            multiple
+            accept="image/jpeg,image/png,image/jpg"
+            class="file-input file-input-bordered w-full"
+          />
+        </div>
+
+        <button
+          onclick="processOCRTest()"
+          id="ocrTestProcessBtn"
+          class="btn btn-grad"
+          disabled
+        >
+          <svg class="icon"><use href="#i-play"/></svg>
+          ทดสอบการอ่าน OCR
+        </button>
+      </div>
+
+      <!-- Progress Section -->
+      <div id="ocrTestProgress" class="hidden mb-6">
+        <div class="alert">
+          <div class="flex items-center gap-3">
+            <span class="loading loading-spinner loading-md"></span>
+            <span id="ocrTestProgressText">กำลังประมวลผล...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Results Section -->
+      <div id="ocrTestResults" class="hidden">
+        <div class="flex flex-wrap justify-between items-center gap-3 mb-4">
+          <h4 class="text-base font-bold">ผลการทดสอบ</h4>
+          <div class="flex gap-2">
+            <button onclick="downloadAllOCRResults()" class="btn btn-grad btn-sm">
+              <svg class="icon"><use href="#i-download"/></svg>
+              ดาวน์โหลดทั้งหมด
+            </button>
+            <button onclick="clearOCRTestResults()" class="btn btn-outline btn-sm">
+              <svg class="icon"><use href="#i-trash"/></svg>
+              ล้างผลลัพธ์
+            </button>
+          </div>
+        </div>
+
+        <!-- Results Grid -->
+        <div id="ocrTestResultsGrid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 max-h-[500px] overflow-y-auto p-1">
+          <!-- Results will be displayed here -->
+        </div>
+      </div>
+
+      <div class="flex justify-end gap-3 mt-5">
+        <button type="button" onclick="closeModal('ocrTestModal')" class="btn btn-outline">
+          ปิด
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- System Settings Modal -->
+  <div class="modal-overlay" id="systemModal">
+    <div class="modal-content">
+      <div class="modal-head">
+        <h2 class="modal-title">
+          <svg class="icon"><use href="#i-monitor"/></svg>
+          System Settings
+        </h2>
+        <button type="button" onclick="closeModal('systemModal')" class="modal-close" aria-label="Close">
+          <svg class="icon"><use href="#i-x"/></svg>
+        </button>
+      </div>
+
+      <div class="space-y-4">
+        <!-- Device Health -->
+        <div class="section-card">
+          <div class="section-title" style="justify-content: space-between;">
+            <span style="display:inline-flex;align-items:center;gap:.5rem;">
+              <svg class="icon"><use href="#i-monitor"/></svg>
+              Device Health
+            </span>
+            <button type="button" onclick="loadSystemHealth()" class="health-refresh" title="Refresh">
+              <svg class="icon"><use href="#i-refresh"/></svg>
+            </button>
+          </div>
+          <div id="systemHealthGrid" class="health-grid">
+            <div class="field-hint">Loading device health...</div>
+          </div>
+        </div>
+
+        <!-- Camera Name -->
+        <div class="section-card">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-video"/></svg>
+            Camera Name
+          </div>
+          <div class="form-control w-full">
+            <div class="field-label">Display Name</div>
+            <div class="flex gap-2">
+              <input type="text" id="renameCameraInput" class="input input-bordered w-full" maxlength="40" placeholder="camera display name" />
+              <button type="button" onclick="renameCamera()" class="btn btn-grad" style="flex:none;">
+                <svg class="icon"><use href="#i-save"/></svg>
+                Save
+              </button>
+            </div>
+            <div class="field-hint">ชื่อสำหรับแสดงผลเท่านั้น &mdash; บันทึกแล้วใช้ทันที ไม่รีสตาร์ทกล้อง (ตั้งภาษาไทยได้)</div>
+          </div>
+        </div>
+
+        <!-- OCR Model -->
+        <div class="section-card">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-scan"/></svg>
+            OCR Model
+          </div>
+          <div class="form-control w-full">
+            <div class="field-label">Model Version</div>
+            <select name="ocrModel" id="ocrModelSelect" form="input_form" class="select select-bordered w-full">
+              <option value="">Default (best_model.blob)</option>
+            </select>
+            <div class="field-hint">โมเดลอยู่ในโฟลเดอร์ python/models/ — เลือกเวอร์ชันที่ต้องการใช้อ่านตัวเลข</div>
+          </div>
+          <div style="margin-top:1rem;">
+            <label class="switch-line">
+              <input type="checkbox" name="enableLetterRead" form="input_form" class="toggle toggle-primary" />
+              <span>อ่านตัวอักษรนำหน้า (A-Z)</span>
+            </label>
+            <div class="field-hint" style="margin-top:.35rem;">ใช้โมเดลอ่านตัวอักษร (text-recognition-0012) รันบน VPU คู่กับโมเดลเลขเดิม เช่น AB123 — ค่าที่ส่งเข้า PLC ยังเป็นตัวเลขเหมือนเดิม ส่วนตัวอักษรจะแสดงบนหน้าเว็บ/Center และชื่อไฟล์รูป</div>
+          </div>
+        </div>
+
+        <!-- Focus -->
+        <div class="section-card space-y-4">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-video"/></svg>
+            Camera Focus
+          </div>
+          <div class="form-control w-full">
+            <div class="field-label">Focus Mode</div>
+            <select name="focusMode" form="input_form" class="select select-bordered w-full" onchange="toggleFocusMode()">
+              <option value="auto">Auto (Continuous Autofocus)</option>
+              <option value="manual">Manual (Fixed Focus)</option>
+            </select>
+          </div>
+          <div class="form-control w-full" id="lensPositionRow">
+            <div class="range-label">Lens Position <span></span></div>
+            <input type="range" name="lensPosition" form="input_form" class="range range-primary range-sm" min="0" max="255" step="1" oninput="onChangeRange(this)" onchange="onChangeRange(this)" />
+            <div class="field-hint">0 = โฟกัสไกลสุด, 255 = โฟกัสใกล้สุด (ปรับตามระยะติดตั้งกล้อง)</div>
+          </div>
+        </div>
+
+        <!-- Camera FPS -->
+        <div class="section-card">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-sliders"/></svg>
+            Capture
+          </div>
+          <div class="form-control w-full">
+            <div class="field-label">Camera FPS</div>
+            <select name="cameraFps" form="input_form" class="select select-bordered w-full">
+              <option value="15">15 fps</option>
+              <option value="20">20 fps</option>
+              <option value="25">25 fps</option>
+              <option value="30">30 fps</option>
+            </select>
+            <div class="field-hint">ลด FPS ช่วยลดภาระ CPU/ความร้อนของกล้อง</div>
+          </div>
+        </div>
+
+        <!-- Central Server API -->
+        <div class="section-card space-y-4">
+          <div class="section-title">
+            <svg class="icon"><use href="#i-globe"/></svg>
+            Central Server API
+          </div>
+          <label class="switch-line">
+            <input type="checkbox" id="centralEnabled" class="toggle toggle-primary" />
+            <span>ส่งข้อมูลไปเว็บกลาง</span>
+          </label>
+          <div class="form-control w-full">
+            <div class="field-label">Central API URL</div>
+            <input type="text" id="centralUrl" class="input input-bordered w-full" placeholder="http://central-server:8080/api/devices/heartbeat" />
+            <div class="field-hint">กล้อง POST heartbeat ไป URL นี้ &mdash; เว็บกลางเห็นอุปกรณ์ใหม่เองอัตโนมัติจาก deviceId (MAC address)</div>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div class="form-control">
+              <div class="field-label">API Key (ถ้ามี)</div>
+              <input type="password" id="centralApiKey" class="input input-bordered w-full" placeholder="X-Api-Key header" />
+            </div>
+            <div class="form-control">
+              <div class="field-label">ส่งทุก (วินาที)</div>
+              <select id="centralInterval" class="select select-bordered w-full">
+                <option value="10">10 s</option>
+                <option value="30" selected>30 s</option>
+                <option value="60">60 s</option>
+                <option value="300">5 min</option>
+              </select>
+            </div>
+          </div>
+          <div>
+            <label class="switch-line">
+              <input type="checkbox" id="centralIncludeImage" class="toggle toggle-primary" checked />
+              <span>แนบภาพล่าสุดที่อ่านได้</span>
+            </label>
+            <div class="field-hint" style="margin-top:.35rem;">ภาพ webp ขนาดเล็ก (~20-50KB) ที่ส่งขึ้นหน้าเว็บอยู่แล้ว ไม่กินทรัพยากรเพิ่ม</div>
+          </div>
+          <div class="flex gap-2">
+            <button type="button" onclick="testCentralConnection()" class="btn btn-outline btn-sm">
+              <svg class="icon"><use href="#i-wifi"/></svg>
+              Test Connection
+            </button>
+            <button type="button" onclick="saveCentralSettings()" class="btn btn-grad btn-sm">
+              <svg class="icon"><use href="#i-save"/></svg>
+              Save API Settings
+            </button>
+          </div>
+          <div id="centralStatus" class="text-sm"></div>
+        </div>
+
+        <div class="callout callout-warn">
+          <div class="callout-head">
+            <svg class="icon"><use href="#i-alert"/></svg>
+            <span>Camera Restart</span>
+          </div>
+          <div class="text-sm">บันทึกแล้วกล้องจะรีสตาร์ทอัตโนมัติเพื่อใช้ค่าใหม่ ใช้เวลาประมาณ 10-20 วินาที</div>
+        </div>
+
+        <div class="flex gap-3 mt-2">
+          <button type="button" onclick="closeModal('systemModal')" class="btn btn-outline flex-1">
+            Cancel
+          </button>
+          <button type="submit" form="input_form" class="btn btn-grad flex-1">
+            <svg class="icon"><use href="#i-save"/></svg>
+            Save System Settings
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="text/javascript">
+    const state = {};
+    const selectedCameraName = state["selectedCameraName"];
+    const cameraList = state["cameraList"];
+    const userRole = state["userRole"] || 'user';
+    const form = document.getElementById("input_form");
+
+    // Initialize UI based on user role
+    document.addEventListener('DOMContentLoaded', function() {
+      initializeUI();
+      updateUserInfo();
+      initializeCameraDisplay();
+      setupSidebarEvents();
+      setupMentionFunctionality(); // Add mention functionality
+      loadSystemModels(); // Preload model list so saved ocrModel survives form submit
+    });
+
+    // ==================== System Settings Functions ====================
+
+    async function loadSystemModels() {
+      const sel = document.getElementById('ocrModelSelect');
+      if (!sel) return;
+      try {
+        const response = await fetch('/api/system/models');
+        const data = await response.json();
+        const desired = sel.dataset.desired !== undefined ? sel.dataset.desired : sel.value;
+        sel.innerHTML = '<option value="">Default (best_model.blob)</option>';
+        (data.models || []).forEach(name => {
+          const option = document.createElement('option');
+          option.value = name;
+          option.textContent = name;
+          sel.appendChild(option);
+        });
+        sel.value = desired;
+        if (sel.value !== desired) sel.value = ''; // saved model folder no longer exists
+      } catch (error) {
+        console.warn('Failed to load OCR models:', error);
+      }
+    }
+
+    function toggleFocusMode() {
+      const modeSelect = document.querySelector('select[name="focusMode"]');
+      const lensRow = document.getElementById('lensPositionRow');
+      if (modeSelect && lensRow) {
+        lensRow.style.display = modeSelect.value === 'manual' ? '' : 'none';
+      }
+    }
+
+    async function renameCamera() {
+      const input = document.getElementById('renameCameraInput');
+      const cameraName = document.getElementById('cameraSelect').value;
+      const displayName = input.value.trim();
+      if (!cameraName) {
+        showNotification('No camera selected', 'warning');
+        return;
+      }
+      if (!displayName) {
+        showNotification('Please enter a name', 'warning');
+        return;
+      }
+      try {
+        const response = await fetch('/api/system/rename-camera', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ cameraName, displayName })
+        });
+        const result = await response.json();
+        if (result.success) {
+          // remember locally + refresh the display right away (no reload needed)
+          if (cameraList[cameraName]) {
+            cameraList[cameraName].displayName = result.displayName;
+          }
+          setCameraNameDisplay(cameraName);
+          showNotification(`Camera name saved: "${result.displayName}"`, 'success');
+        } else {
+          showNotification(result.message || 'Rename failed', 'error');
+        }
+      } catch (error) {
+        showNotification('Rename failed: connection error', 'error');
+      }
+    }
+
+    // ==================== Central Server API Functions ====================
+
+    async function loadCentralSettings() {
+      try {
+        const response = await fetch('/api/system/central');
+        const data = await response.json();
+        if (!data.success) return;
+        const c = data.central || {};
+        document.getElementById('centralEnabled').checked = !!c.enabled;
+        document.getElementById('centralUrl').value = c.url || '';
+        document.getElementById('centralApiKey').value = c.apiKey || '';
+        document.getElementById('centralInterval').value = c.intervalSec || 30;
+        document.getElementById('centralIncludeImage').checked = c.includeImage !== false;
+        renderCentralStatus(data.lastResult);
+      } catch (error) {
+        console.warn('Failed to load central settings:', error);
+      }
+    }
+
+    function renderCentralStatus(result) {
+      const el = document.getElementById('centralStatus');
+      if (!el) return;
+      if (!result || result.ok === null) {
+        el.innerHTML = '<span style="color: var(--text-3);">ยังไม่เคยส่งข้อมูล</span>';
+      } else if (result.ok) {
+        el.innerHTML = `<span class="inline-flex items-center gap-2" style="color: var(--ok);"><svg class="icon"><use href="#i-check-circle"/></svg>ส่งสำเร็จล่าสุด ${new Date(result.at).toLocaleTimeString()}</span>`;
+      } else {
+        el.innerHTML = `<span class="inline-flex items-center gap-2" style="color: var(--err);"><svg class="icon"><use href="#i-alert"/></svg>ส่งไม่สำเร็จ: ${result.error || 'HTTP ' + result.status}</span>`;
+      }
+    }
+
+    async function saveCentralSettings() {
+      const body = {
+        enabled: document.getElementById('centralEnabled').checked,
+        url: document.getElementById('centralUrl').value,
+        apiKey: document.getElementById('centralApiKey').value,
+        intervalSec: document.getElementById('centralInterval').value,
+        includeImage: document.getElementById('centralIncludeImage').checked
+      };
+      try {
+        const response = await fetch('/api/system/central', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
+        });
+        const result = await response.json();
+        if (result.success) {
+          showNotification('Central API settings saved', 'success');
+        } else {
+          showNotification(result.message || 'Save failed', 'error');
+        }
+      } catch (error) {
+        showNotification('Save failed: connection error', 'error');
+      }
+    }
+
+    async function testCentralConnection() {
+      const statusEl = document.getElementById('centralStatus');
+      statusEl.innerHTML = '<span class="inline-flex items-center gap-2" style="color: var(--info);"><span class="loading loading-spinner loading-xs"></span>กำลังทดสอบ...</span>';
+      try {
+        const response = await fetch('/api/system/central/test', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            url: document.getElementById('centralUrl').value,
+            apiKey: document.getElementById('centralApiKey').value,
+            includeImage: document.getElementById('centralIncludeImage').checked
+          })
+        });
+        const data = await response.json();
+        renderCentralStatus(data.result);
+      } catch (error) {
+        statusEl.innerHTML = '<span style="color: var(--err);">Test failed: connection error</span>';
+      }
+    }
+
+    function formatUptime(seconds) {
+      const d = Math.floor(seconds / 86400);
+      const h = Math.floor((seconds % 86400) / 3600);
+      const m = Math.floor((seconds % 3600) / 60);
+      return (d > 0 ? `${d}d ` : '') + `${h}h ${m}m`;
+    }
+
+    function meterClass(percent, warnAt, critAt) {
+      if (percent >= critAt) return 'crit';
+      if (percent >= warnAt) return 'warn';
+      return '';
+    }
+
+    async function loadSystemHealth() {
+      const grid = document.getElementById('systemHealthGrid');
+      if (!grid) return;
+      try {
+        const response = await fetch('/api/system/health');
+        const data = await response.json();
+        if (!data.success) throw new Error(data.error || 'health API failed');
+        const h = data.health;
+
+        const ramUsedMb = h.ram.totalMb - h.ram.freeMb;
+        const ramPercent = Math.round((ramUsedMb / h.ram.totalMb) * 100);
+
+        let diskTile = `
+          <div class="health-tile wide">
+            <div class="health-label">Disk (Image Storage)</div>
+            <div class="health-value">N/A</div>
+          </div>`;
+        if (h.disk) {
+          const usedGb = (h.disk.usedMb / 1024).toFixed(1);
+          const totalGb = (h.disk.totalMb / 1024).toFixed(1);
+          diskTile = `
+            <div class="health-tile wide">
+              <div class="health-label">Disk (Image Storage)</div>
+              <div class="health-value">${usedGb} / ${totalGb} GB <small>(${h.disk.usedPercent}% used)</small></div>
+              <div class="meter"><div class="meter-fill ${meterClass(h.disk.usedPercent, 75, 90)}" style="width:${h.disk.usedPercent}%"></div></div>
+            </div>`;
+        }
+
+        const cpuTile = `
+          <div class="health-tile">
+            <div class="health-label">CPU Load</div>
+            <div class="health-value">${h.cpu.loadPercent !== null ? h.cpu.loadPercent + '%' : 'N/A'} <small>(${h.cpu.cores} cores)</small></div>
+            ${h.cpu.loadPercent !== null ? `<div class="meter"><div class="meter-fill ${meterClass(h.cpu.loadPercent, 70, 90)}" style="width:${h.cpu.loadPercent}%"></div></div>` : ''}
+          </div>`;
+
+        const tempTile = `
+          <div class="health-tile">
+            <div class="health-label">CPU Temp</div>
+            <div class="health-value" ${h.cpuTempC !== null && h.cpuTempC >= 75 ? 'style="color: var(--err);"' : ''}>${h.cpuTempC !== null ? h.cpuTempC + ' &deg;C' : 'N/A'}</div>
+            ${h.cpuTempC !== null ? `<div class="meter"><div class="meter-fill ${meterClass(h.cpuTempC, 65, 75)}" style="width:${Math.min(100, Math.round(h.cpuTempC / 90 * 100))}%"></div></div>` : ''}
+          </div>`;
+
+        const ramTile = `
+          <div class="health-tile">
+            <div class="health-label">Memory</div>
+            <div class="health-value">${(ramUsedMb / 1024).toFixed(1)} / ${(h.ram.totalMb / 1024).toFixed(1)} GB</div>
+            <div class="meter"><div class="meter-fill ${meterClass(ramPercent, 80, 92)}" style="width:${ramPercent}%"></div></div>
+          </div>`;
+
+        const uptimeTile = `
+          <div class="health-tile">
+            <div class="health-label">Uptime</div>
+            <div class="health-value">${formatUptime(h.uptimeSec)}</div>
+          </div>`;
+
+        grid.innerHTML = diskTile + cpuTile + tempTile + ramTile + uptimeTile;
+      } catch (error) {
+        grid.innerHTML = '<div class="field-hint" style="color: var(--err);">Failed to load device health</div>';
+        console.warn('Health load error:', error);
+      }
+    }
+
+    function setupSidebarEvents() {
+      // Settings button toggle
+      document.getElementById('settingsBtn').addEventListener('click', function() {
+        const settingsSidebar = document.getElementById('settingsSidebar');
+        const mainContent = document.getElementById('mainContent');
+        
+        if (settingsSidebar.classList.contains('show')) {
+          // Hide settings sidebar
+          settingsSidebar.classList.remove('show');
+          mainContent.classList.remove('with-settings');
+          mainContent.classList.add('expanded');
+          this.classList.remove('active');
+        } else {
+          // Show settings sidebar
+          settingsSidebar.classList.add('show');
+          mainContent.classList.remove('expanded');
+          mainContent.classList.add('with-settings');
+          this.classList.add('active');
+        }
+      });
+
+      // Logout button
+      document.getElementById('logoutBtn').addEventListener('click', function() {
+        logout();
+      });
+
+      // Network button
+      document.getElementById('networkBtn').addEventListener('click', function() {
+        if (userRole === 'admin') {
+          showModal('networkModal');
+          loadNetworkConfig();
+        }
+      });
+
+      // Users button
+      document.getElementById('usersBtn').addEventListener('click', function() {
+        if (userRole === 'admin') {
+          showModal('usersModal');
+          loadUsersConfig();
+        }
+      });
+
+      // System button
+      document.getElementById('systemBtn').addEventListener('click', function() {
+        if (userRole === 'admin') {
+          showModal('systemModal');
+          loadSystemModels();
+          loadSystemHealth();
+          loadCentralSettings();
+          const renameInput = document.getElementById('renameCameraInput');
+          if (renameInput) {
+            const currentCamera = document.getElementById('cameraSelect').value;
+            const cfg = cameraList[currentCamera] || {};
+            renameInput.value = cfg.displayName || currentCamera || '';
+          }
+        }
+      });
+    }
+
+    function initializeUI() {
+      // Apply user role restrictions
+      if (userRole !== 'admin') {
+        // Lock sidebar items for regular users
+        const networkBtn = document.getElementById('networkBtn');
+        const usersBtn = document.getElementById('usersBtn');
+        const systemBtn = document.getElementById('systemBtn');
+        const ocrTestBtn = document.getElementById('ocrTestBtn');
+        
+        [networkBtn, usersBtn, systemBtn, ocrTestBtn].forEach(btn => {
+          if (btn) {
+            btn.classList.add('locked');
+            btn.onclick = function(e) {
+              e.preventDefault();
+              showAccessDeniedMessage();
+            };
+          }
+        });
+
+        // Also lock form inputs
+        lockFormInputs();
+      } else {
+        // Setup admin functionality
+        setupAdminUI();
+      }
+    }
+
+    function updateUserInfo() {
+      const userInfo = document.getElementById('userInfo');
+      if (userInfo && state.user) {
+        userInfo.innerHTML = `
+          <div class="font-semibold">${state.user.username || 'Unknown'}</div>
+          <div class="text-xs opacity-60">${userRole}</div>
+        `;
+      }
+    }
+
+    // Show displayName (fallback: internal camera name) in the Camera Name field
+    function setCameraNameDisplay(name) {
+      const el = document.getElementById('cameraDisplayName');
+      if (!el) return;
+      const cfg = cameraList[name] || {};
+      el.textContent = cfg.displayName || name || 'No camera selected';
+    }
+
+    function initializeCameraDisplay() {
+      // Initialize camera display on page load
+      const cameraSelect = document.getElementById("cameraSelect");
+
+      // Auto-select first enabled camera or use selectedCameraName from state
+      let autoSelectCamera = selectedCameraName;
+
+      if (!autoSelectCamera) {
+        // Find first enabled camera
+        for (const [cameraName, config] of Object.entries(cameraList)) {
+          if (config.enable === "1") {
+            autoSelectCamera = cameraName;
+            break;
+          }
+        }
+      }
+
+      // If we have a camera to auto-select, select it
+      if (autoSelectCamera && cameraList[autoSelectCamera]) {
+        cameraSelect.value = autoSelectCamera;
+        setCameraNameDisplay(autoSelectCamera);
+        onChangeCamera({ value: autoSelectCamera });
+      } else {
+        // Set first available camera if any exist
+        const firstCamera = Object.keys(cameraList)[0];
+        if (firstCamera) {
+          cameraSelect.value = firstCamera;
+          setCameraNameDisplay(firstCamera);
+          onChangeCamera({ value: firstCamera });
+        }
+      }
+    }
+
+    function lockFormInputs() {
+      const formElements = form.querySelectorAll('input, select, button[type="submit"]');
+      formElements.forEach(element => {
+        if (element.type !== 'button') {
+          element.disabled = true;
+          element.style.opacity = '0.6';
+          element.style.cursor = 'not-allowed';
+        }
+      });
+
+      // Add lock indicator to form
+      const formContainer = form.querySelector('.panel-head');
+      if (formContainer) {
+        const lockIndicator = document.createElement('div');
+        lockIndicator.className = 'readonly-chip';
+        lockIndicator.innerHTML = '<svg class="icon"><use href="#i-lock"/></svg> Read Only';
+        formContainer.style.position = 'relative';
+        formContainer.appendChild(lockIndicator);
+      }
+    }
+
+    function setupAdminUI() {
+      // Admin UI setup - sidebar access control already handled in initializeUI
+    }
+
+    function showAccessDeniedMessage() {
+      const toast = document.createElement('div');
+      toast.className = 'app-toast toast-error';
+      toast.innerHTML = '<svg class="icon"><use href="#i-lock"/></svg><span>You do not have permission to access this function</span>';
+      document.body.appendChild(toast);
+
+      setTimeout(() => {
+        toast.remove();
+      }, 3000);
+    }
+
+    // Modal management
+    function showModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        // clear inline display:none left behind by closeModal, otherwise it
+        // overrides the .show class and the modal never reopens
+        modal.style.display = 'flex';
+        modal.classList.add('show');
+      }
+    }
+
+    function openModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.add('modal-open');
+        modal.style.display = 'flex';
+        modal.style.alignItems = 'center';
+        modal.style.justifyContent = 'center';
+      }
+    }
+
+    function closeModal(modalId) {
+      const modal = document.getElementById(modalId);
+      if (modal) {
+        modal.classList.remove('show');
+        modal.classList.remove('modal-open');
+        modal.style.display = 'none';
+      }
+    }
+
+    // Notification system
+    function showNotification(message, type = 'info') {
+      const notification = document.createElement('div');
+      notification.className = `app-toast transform translate-x-full transition-transform duration-300`;
+
+      const toastTypes = {
+        success: { cls: 'toast-success', icon: 'i-check-circle' },
+        error: { cls: 'toast-error', icon: 'i-alert' },
+        warning: { cls: 'toast-warning', icon: 'i-alert' },
+        info: { cls: 'toast-info', icon: 'i-info' }
+      };
+      const t = toastTypes[type] || toastTypes.info;
+
+      notification.classList.add(t.cls);
+      notification.innerHTML = `
+        <svg class="icon"><use href="#${t.icon}"/></svg>
+        <span></span>
+        <button onclick="this.parentElement.remove()" class="toast-close">&times;</button>
+      `;
+      // message as plain text - never as HTML
+      notification.querySelector('span').textContent = message;
+      
+      document.body.appendChild(notification);
+      
+      // Show notification
+      setTimeout(() => {
+        notification.classList.remove('translate-x-full');
+      }, 100);
+      
+      // Auto remove after 5 seconds
+      setTimeout(() => {
+        if (notification.parentElement) {
+          notification.classList.add('translate-x-full');
+          setTimeout(() => {
+            if (notification.parentElement) {
+              notification.remove();
+            }
+          }, 300);
+        }
+      }, 5000);
+    }
+
+    // Network configuration
+    function toggleNetworkMode() {
+      const mode = document.getElementById('networkMode').value;
+      const staticConfig = document.getElementById('staticConfig');
+      
+      if (mode === 'static') {
+        staticConfig.style.display = 'block';
+      } else {
+        staticConfig.style.display = 'none';
+      }
+    }
+
+    async function loadNetworkConfig() {
+      try {
+        console.log('Loading network configuration...');
+        
+        // Load system info
+        const systemResponse = await fetch('/api/network/info');
+        const systemData = await systemResponse.json();
+        
+        console.log('System data:', systemData);
+        
+        if (systemData.success) {
+          const systemInfo = document.getElementById('networkSystemInfo');
+          systemInfo.innerHTML = `
+            <div class="grid grid-cols-2 gap-4 text-sm">
+              <div><strong>System:</strong> ${systemData.info.systemType}</div>
+              <div><strong>Interface:</strong> ${systemData.info.primaryInterface}</div>
+            </div>
+          `;
+        } else {
+          console.error('Failed to load system info:', systemData);
+        }
+
+        // Load interfaces
+        const interfacesResponse = await fetch('/api/network/interfaces');
+        const interfacesData = await interfacesResponse.json();
+        
+        console.log('Interfaces data:', interfacesData);
+        
+        if (interfacesData.success) {
+          const interfaceSelect = document.getElementById('networkInterface');
+          interfaceSelect.innerHTML = '';
+          
+          if (interfacesData.interfaces && interfacesData.interfaces.length > 0) {
+            interfacesData.interfaces.forEach(iface => {
+              const option = document.createElement('option');
+              option.value = iface;
+              option.textContent = iface;
+              if (iface === interfacesData.primaryInterface) {
+                option.selected = true;
+              }
+              interfaceSelect.appendChild(option);
+            });
+          } else {
+            // Fallback if no interfaces returned
+            const option = document.createElement('option');
+            option.value = 'eth0';
+            option.textContent = 'eth0 (default)';
+            interfaceSelect.appendChild(option);
+          }
+        } else {
+          console.error('Failed to load interfaces:', interfacesData);
+          showNotification('Failed to load network interfaces', 'warning');
+        }
+
+        // Load current config
+        const configResponse = await fetch('/api/network/current');
+        const configData = await configResponse.json();
+        
+        if (configData.success) {
+          const form = document.getElementById('networkForm');
+          const config = configData.config;
+          
+          // Update current config display
+          const currentConfigDetails = document.getElementById('currentConfigDetails');
+          currentConfigDetails.innerHTML = `
+            <div class="grid grid-cols-2 gap-2">
+              <div><strong>Mode:</strong> ${config.mode.toUpperCase()}</div>
+              <div><strong>IP:</strong> ${config.ip || 'N/A'}</div>
+              <div><strong>Gateway:</strong> ${config.gateway || 'N/A'}</div>
+              <div><strong>DNS:</strong> ${config.dns ? config.dns.join(', ') : 'N/A'}</div>
+            </div>
+          `;
+          
+          // Set form values
+          form.mode.value = config.mode;
+          if (config.mode === 'static') {
+            form.ip.value = config.ip || '';
+            form.netmask.value = config.netmask || '';
+            form.gateway.value = config.gateway || '';
+            form.dns.value = config.dns ? config.dns.join(', ') : '';
+          }
+          toggleNetworkMode();
+        }
+      } catch (error) {
+        console.error('Error loading network config:', error);
+        showNotification('Failed to load network configuration', 'error');
+      }
+    }
+
+    async function saveNetworkConfig() {
+      try {
+        const form = document.getElementById('networkForm');
+        const formData = new FormData(form);
+        
+        const config = {
+          mode: formData.get('mode'),
+          interface: formData.get('interface')
+        };
+        
+        if (config.mode === 'static') {
+          config.ip = formData.get('ip');
+          config.netmask = formData.get('netmask');
+          config.gateway = formData.get('gateway');
+          
+          const dnsString = formData.get('dns');
+          if (dnsString) {
+            config.dns = dnsString.split(',').map(dns => dns.trim()).filter(dns => dns);
+          }
+          
+          // Validate required fields
+          if (!config.ip || !config.netmask || !config.gateway) {
+            showNotification('Please fill in all required fields for static IP', 'error');
+            return;
+          }
+        }
+        
+        // Show confirmation dialog
+        if (!confirm('Changing network configuration will PERMANENTLY modify system settings and may disconnect you temporarily. The new IP will be saved to survive reboots. Continue?')) {
+          return;
+        }
+        
+        showNotification('Applying PERMANENT network configuration...', 'info');
+        
+        const response = await fetch('/api/network/configure', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(config)
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          showNotification('Network configuration saved PERMANENTLY and applied successfully', 'success');
+          closeModal('networkModal');
+          
+          // Show reconnection message
+          setTimeout(() => {
+            showNotification('Network is restarting with PERMANENT settings. You may need to refresh the page with new IP.', 'info');
+          }, 2000);
+          
+          // Auto refresh after 15 seconds to allow network restart
+          setTimeout(() => {
+            showNotification('Reloading page to connect with new permanent network settings...', 'info');
+            setTimeout(() => {
+              window.location.reload();
+            }, 3000);
+          }, 15000);
+        } else {
+          console.error('Network configuration failed:', result);
+          showNotification(`Failed to update network: ${result.message}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error saving network config:', error);
+        showNotification('Failed to save network configuration', 'error');
+      }
+    }
+
+    async function testNetworkConnectivity() {
+      try {
+        const testResult = document.getElementById('networkTestResult');
+        testResult.innerHTML = '<span class="inline-flex items-center gap-2" style="color: var(--info);"><span class="loading loading-spinner loading-xs"></span>Testing connectivity...</span>';
+        
+        const response = await fetch('/api/network/test', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ host: '8.8.8.8' })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          testResult.innerHTML = '<span class="inline-flex items-center gap-2" style="color: var(--ok);"><svg class="icon"><use href="#i-check-circle"/></svg>Network connectivity OK</span>';
+        } else {
+          testResult.innerHTML = '<span class="inline-flex items-center gap-2" style="color: var(--err);"><svg class="icon"><use href="#i-alert"/></svg>Network connectivity failed</span>';
+        }
+      } catch (error) {
+        const testResult = document.getElementById('networkTestResult');
+        testResult.innerHTML = '<span class="inline-flex items-center gap-2" style="color: var(--err);"><svg class="icon"><use href="#i-alert"/></svg>Test failed</span>';
+      }
+    }
+
+    async function loadUsersConfig() {
+      try {
+        const response = await fetch('/api/users');
+        const data = await response.json();
+        
+        if (data.success) {
+          renderUsersTable(data.users);
+          // Store users for mention functionality
+          window.usersList = data.users;
+        }
+      } catch (error) {
+        console.error('Error loading users:', error);
+        // Fallback: empty users list
+        window.usersList = [];
+      }
+    }
+
+    // User mention functionality
+    function setupMentionFunctionality() {
+      // Get all text areas and input fields where mentions might be used
+      const textElements = document.querySelectorAll('textarea, input[type="text"]');
+      
+      textElements.forEach(element => {
+        element.addEventListener('input', function(e) {
+          const value = e.target.value;
+          const cursorPos = e.target.selectionStart;
+          
+          // Check if user typed @ symbol
+          if (value.charAt(cursorPos - 1) === '@') {
+            showUserMentionDropdown(e.target, cursorPos);
+          }
+        });
+      });
+    }
+
+    function showUserMentionDropdown(input, position) {
+      // Remove existing dropdown if any
+      const existingDropdown = document.getElementById('mentionDropdown');
+      if (existingDropdown) {
+        existingDropdown.remove();
+      }
+
+      // Get users list
+      const users = window.usersList || [];
+      if (users.length === 0) return;
+
+      // Create dropdown
+      const dropdown = document.createElement('div');
+      dropdown.id = 'mentionDropdown';
+      dropdown.className = 'mention-panel absolute z-50 max-h-48 overflow-y-auto';
+      dropdown.style.left = '0px';
+      dropdown.style.top = '100%';
+      dropdown.style.minWidth = '200px';
+
+      // Add users to dropdown
+      users.forEach(user => {
+        const item = document.createElement('div');
+        item.className = 'mention-item';
+        item.innerHTML = `
+          <div class="avatar-chip ${user.role === 'admin' ? 'admin' : 'user'}" style="width:30px;height:30px;font-size:.78rem;">
+            ${user.username.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <div class="font-medium text-sm">${user.username}</div>
+            <div class="text-xs" style="color: var(--text-3);">${user.role === 'admin' ? 'Admin' : 'User'}</div>
+          </div>
+        `;
+        
+        item.addEventListener('click', function() {
+          insertMention(input, position, user.username);
+          dropdown.remove();
+        });
+        
+        dropdown.appendChild(item);
+      });
+
+      // Position dropdown relative to input
+      const inputRect = input.getBoundingClientRect();
+      dropdown.style.position = 'fixed';
+      dropdown.style.left = inputRect.left + 'px';
+      dropdown.style.top = inputRect.bottom + 5 + 'px';
+
+      document.body.appendChild(dropdown);
+
+      // Close dropdown when clicking outside
+      setTimeout(() => {
+        document.addEventListener('click', function closeDropdown(e) {
+          if (!dropdown.contains(e.target) && e.target !== input) {
+            dropdown.remove();
+            document.removeEventListener('click', closeDropdown);
+          }
+        });
+      }, 100);
+    }
+
+    function insertMention(input, position, username) {
+      const value = input.value;
+      const beforeCursor = value.substring(0, position);
+      const afterCursor = value.substring(position);
+      
+      // Replace @ with @username
+      const newValue = beforeCursor.slice(0, -1) + '@' + username + ' ' + afterCursor;
+      input.value = newValue;
+      
+      // Set cursor position after the mention
+      const newCursorPos = position + username.length + 1;
+      input.setSelectionRange(newCursorPos, newCursorPos);
+      input.focus();
+    }
+
+    function renderUsersTable(users) {
+      const content = document.getElementById('usersContent');
+      content.innerHTML = `
+        <div class="mb-5 flex flex-wrap justify-between items-center gap-3">
+          <div class="flex items-center gap-4">
+            <button onclick="showAddUserForm()" class="btn btn-grad">
+              <svg class="icon"><use href="#i-plus"/></svg>
+              Add New User
+            </button>
+            <div class="text-sm" style="color: var(--text-2);">
+              <span class="font-semibold" style="color: var(--text-1);">${users.length}</span> total users
+            </div>
+          </div>
+          <div class="input-icon-wrap w-64">
+            <svg class="icon"><use href="#i-search"/></svg>
+            <input type="text" placeholder="Search users..." class="input input-bordered input-sm w-full" id="userSearch"
+              oninput="[...document.querySelectorAll('#usersContent tbody tr')].forEach(tr => tr.style.display = tr.textContent.toLowerCase().includes(this.value.toLowerCase()) ? '' : 'none')">
+          </div>
+        </div>
+        <div class="table-wrap">
+          <div class="overflow-x-auto">
+            <table class="table table-zebra w-full">
+              <thead>
+                <tr>
+                  <th class="text-left py-3 px-5">Username</th>
+                  <th class="text-center py-3 px-5">Role</th>
+                  <th class="text-center py-3 px-5">Created</th>
+                  <th class="text-center py-3 px-5">Last Login</th>
+                  <th class="text-center py-3 px-5">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${users.map((user, index) => `
+                  <tr class="transition-colors">
+                    <td class="py-3 px-5">
+                      <div class="flex items-center gap-3">
+                        <div class="avatar-chip ${user.role === 'admin' ? 'admin' : 'user'}">
+                          ${user.username.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div class="font-semibold">${user.username}</div>
+                          <div class="text-xs" style="color: var(--text-3);">ID: ${index + 1}</div>
+                        </div>
+                      </div>
+                    </td>
+                    <td class="text-center py-3 px-5">
+                      <span class="role-badge ${user.role === 'admin' ? 'admin' : 'user'}">
+                        <svg class="icon"><use href="#${user.role === 'admin' ? 'i-shield' : 'i-user'}"/></svg>
+                        ${user.role === 'admin' ? 'Admin' : 'User'}
+                      </span>
+                    </td>
+                    <td class="text-center py-3 px-5">
+                      <div class="text-sm">${new Date(user.created).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}</div>
+                      <div class="text-xs" style="color: var(--text-3);">${new Date(user.created).toLocaleTimeString('en-US', {
+                        hour: '2-digit',
+                        minute: '2-digit'
+                      })}</div>
+                    </td>
+                    <td class="text-center py-3 px-5">
+                      ${user.lastLogin ? `
+                        <div class="text-sm">${new Date(user.lastLogin).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}</div>
+                        <div class="text-xs" style="color: var(--text-3);">${new Date(user.lastLogin).toLocaleTimeString('en-US', {
+                          hour: '2-digit',
+                          minute: '2-digit'
+                        })}</div>
+                      ` : `
+                        <span class="text-sm" style="color: var(--text-3);">Never logged in</span>
+                      `}
+                    </td>
+                    <td class="text-center py-3 px-5">
+                      <div class="flex justify-center gap-2">
+                        <button onclick="editUser('${user.username}')" class="btn btn-sm btn-outline">
+                          <svg class="icon"><use href="#i-edit"/></svg>
+                          Edit
+                        </button>
+                        <button onclick="deleteUser('${user.username}')" class="btn btn-sm btn-outline" style="color: var(--err); border-color: rgba(251,113,133,.35);">
+                          <svg class="icon"><use href="#i-trash"/></svg>
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="mt-4 text-sm" style="color: var(--text-3);">
+          Showing ${users.length} of ${users.length} users
+        </div>
+      `;
+    }
+
+    // Network form submission
+    document.getElementById('networkForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      await saveNetworkConfig();
+    });
+
+
+
+    // Close modals when clicking outside
+    document.addEventListener('click', function(e) {
+      if (e.target.classList.contains('modal-overlay')) {
+        e.target.classList.remove('show');
+        e.target.style.display = 'none';
+      }
+    });
+
+    // Initialize socket connection
+    const socket = io();
+
+    const cameraSelect = document.getElementById("cameraSelect");
+    const currentImagePreview = document.querySelector("#currentImagePreview");
+    const lastImagePreview = document.querySelector("#lastImagePreview");
+
+    const effect_list = [
+      "OFF",
+      "MONO",
+      "NEGATIVE",
+      "SOLARIZE",
+      "SEPIA",
+      "POSTERIZE",
+      "WHITEBOARD",
+      "BLACKBOARD",
+      "AQUA"
+    ];
+
+    const onChangeRange = (target) => {
+      let value = target.value;
+      if (target.name === "effectmode") {
+        value = effect_list[target.value];
+      }
+      target.previousElementSibling.querySelector("span").innerHTML = `(${value})`;
+    };
+
+    const onLog = (cameraName) => (log) => {
+      const log_panel = document.querySelector("#log_panel");
+      const div = document.createElement("DIV");
+      div.innerHTML = `${log.time}: ${cameraName}: ${log.message.split("\n").join("<br>")}`;
+      log_panel.appendChild(div);
+      log_panel.scrollTop = log_panel.scrollHeight;
+
+      // remove old log
+      if (log_panel.children.length > 20) {
+        log_panel.removeChild(log_panel.children[0]);
+      }
+    };
+
+    const onChangeCamera = (target) => {
+      const cameraName = target.value;
+      onLog(cameraName)({
+        // HH:mm:ss
+        time: new Date().toLocaleTimeString(),
+        message: `---------------- Change camera to ${cameraName} ----------------`
+      });
+      if (cameraName) {
+        const currentConfig = cameraList[cameraName] || {};
+        document.getElementById("camera_selected_wrap").classList.remove("hidden");
+
+        currentImagePreview.classList.add("hidden");
+        lastImagePreview.classList.add("hidden");
+
+        form.cameraName.value = cameraName || "";
+        form.enable.checked = currentConfig.enable === "1" ? "checked" : "";
+        form.enablePreview.checked = currentConfig.enablePreview === "1" ? "checked" : "";
+        form.enableOcr.checked = currentConfig.enableOcr === "1" ? "checked" : "";
+        form.enablePlc.checked = currentConfig.enablePlc === "1" ? "checked" : "";
+        form.enableWriteFile.checked = currentConfig.enableWriteFile === "1" ? "checked" : "";
+        form.saveOnlyValid.checked = currentConfig.saveOnlyValid === "1" ? "checked" : "";
+        form.saveMinConfidence.value = currentConfig.saveMinConfidence || 0;
+        form.cleanupDays.value = currentConfig.cleanupDays || 0;
+        form.minFreeDiskPercent.value = currentConfig.minFreeDiskPercent || 10;
+        form.saveMinConfidence.previousElementSibling.querySelector("span").innerHTML = `(${form.saveMinConfidence.value})`;
+
+        form.writeFilePath.value = currentConfig.writeFilePath || "";
+        form.plcAddress.value = currentConfig.plcAddress || "";
+        form.plcDbNum.value = currentConfig.plcDbNum || "";
+        form.contrast.value = currentConfig.contrast || 0;
+        form.sharpness.value = currentConfig.sharpness || 1;
+        form.saturation.value = currentConfig.saturation || 0;
+        form.chromadenoise.value = currentConfig.chromadenoise || 1;
+        form.lumadenoise.value = currentConfig.lumadenoise || 1;
+        form.autoexposurecompensation.value = currentConfig.autoexposurecompensation || 0;
+        form.effectmode.value = currentConfig.effectmode || 0;
+
+        form.cropX1.value = currentConfig.cropX1 || 0;
+        form.cropY1.value = currentConfig.cropY1 || 0;
+        form.cropX2.value = currentConfig.cropX2 || 0;
+        form.cropY2.value = currentConfig.cropY2 || 0;
+
+        // System settings (fields live in the System modal, bound via form="input_form")
+        form.enableLetterRead.checked = currentConfig.enableLetterRead === "1" ? "checked" : "";
+        form.focusMode.value = currentConfig.focusMode || 'auto';
+        form.lensPosition.value = currentConfig.lensPosition || 135;
+        form.cameraFps.value = currentConfig.cameraFps || '30';
+        const ocrModelSelect = document.getElementById('ocrModelSelect');
+        ocrModelSelect.dataset.desired = currentConfig.ocrModel || '';
+        ocrModelSelect.value = ocrModelSelect.dataset.desired;
+        if (ocrModelSelect.value !== ocrModelSelect.dataset.desired) ocrModelSelect.value = '';
+        form.lensPosition.previousElementSibling.querySelector("span").innerHTML = `(${form.lensPosition.value})`;
+        toggleFocusMode();
+
+        form.contrast.previousElementSibling.querySelector("span").innerHTML = `(${form.contrast.value})`;
+        form.sharpness.previousElementSibling.querySelector("span").innerHTML = `(${form.sharpness.value})`;
+        form.saturation.previousElementSibling.querySelector("span").innerHTML = `(${form.saturation.value})`;
+        form.chromadenoise.previousElementSibling.querySelector("span").innerHTML = `(${form.chromadenoise.value})`;
+        form.lumadenoise.previousElementSibling.querySelector("span").innerHTML = `(${form.lumadenoise.value})`;
+        form.autoexposurecompensation.previousElementSibling.querySelector("span").innerHTML = `(${form.autoexposurecompensation.value})`;
+        form.effectmode.previousElementSibling.querySelector("span").innerHTML = `(${effect_list[form.effectmode.value]})`;
+
+        // Show preview - always show when camera is selected
+        const previewWrap = document.getElementById("previewWrap");
+        previewWrap.classList.remove("opacity-0");
+
+        // Setup socket listeners
+        socket.removeAllListeners();
+        socket.on(`log_all`, onLog(cameraName));
+        socket.on(`log_${cameraName}`, onLog(cameraName));
+        socket.on(`ocr_frame_${cameraName}`, (image) => {
+          currentImagePreview.src = `data:image/jpeg;base64,${image.data}`;
+          currentImagePreview.classList.remove("hidden");
+        });
+        socket.on(`ocr_frame_last_${cameraName}`, (image) => {
+          lastImagePreview.src = `data:image/jpeg;base64,${image.data}`;
+          lastImagePreview.classList.remove("hidden");
+        });
+        // PLC weight
+        socket.on(`plc_weight_${cameraName}`, (payload) => {
+          try {
+            const val = payload.data;
+            const el = document.getElementById('plcWeightInFrame');
+            if (el) {
+              const num = parseFloat(val);
+              el.textContent = `Weight: ${isNaN(num) ? val : num.toFixed(3)}`;
+            }
+          } catch (e) {
+            console.warn('plc_weight parse error', e);
+          }
+        });
+      } else {
+        document.getElementById("camera_selected_wrap").classList.add("hidden");
+        // Keep preview visible even when no camera is selected
+      }
+    };
+
+    // (camera auto-select runs once in initializeCameraDisplay on DOMContentLoaded)
+
+    // Logout function
+    const logout = async () => {
+      try {
+        await fetch('/logout', { method: 'POST' });
+        window.location.href = '/login';
+      } catch (error) {
+        console.error('Logout error:', error);
+        window.location.href = '/login';
+      }
+    };
+
+    // User Management Functions
+    function showAddUserForm() {
+      showModal('addUserModal');
+      document.getElementById('addUserForm').reset();
+    }
+
+    async function editUser(username) {
+      try {
+        // Fetch user data from API
+        const response = await fetch(`/api/users/${username}`);
+        const result = await response.json();
+        
+        if (result.success) {
+          const user = result.user;
+          showModal('editUserModal');
+          const form = document.getElementById('editUserForm');
+          form.originalUsername.value = username;
+          form.username.value = user.username;
+          form.role.value = user.role;
+          form.password.value = ''; // Always clear password field
+        } else {
+          alert('Error loading user data: ' + result.message);
+        }
+      } catch (error) {
+        // Fallback if API not available
+        showModal('editUserModal');
+        const form = document.getElementById('editUserForm');
+        form.originalUsername.value = username;
+        form.username.value = username;
+        form.password.value = '';
+        console.warn('API not available, using fallback method');
+      }
+    }
+
+    function deleteUser(username) {
+      if (confirm(`Are you sure you want to delete user "${username}"?\n\nThis action cannot be undone and will permanently remove the user account.`)) {
+        deleteUserConfirmed(username);
+      }
+    }
+
+    async function deleteUserConfirmed(username) {
+      try {
+        const response = await fetch(`/api/users/delete/${username}`, {
+          method: 'DELETE',
+          headers: {
+            'Content-Type': 'application/json',
+          }
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('User deleted successfully!');
+          // Reload the users list with a small delay
+          setTimeout(() => {
+            loadUsersConfig();
+          }, 100);
+        } else {
+          alert('Error deleting user: ' + result.message);
+        }
+      } catch (error) {
+        alert('Connection error occurred');
+        console.error('Delete user error:', error);
+      }
+    }
+
+    // Add User Form Submission
+    document.getElementById('addUserForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(this);
+      const userData = {
+        username: formData.get('username'),
+        password: formData.get('password'),
+        confirmPassword: formData.get('confirmPassword'),
+        role: formData.get('role')
+      };
+
+      // Validate passwords match
+      if (userData.password !== userData.confirmPassword) {
+        alert('Passwords do not match!');
+        return;
+      }
+
+      // Validate password length
+      if (userData.password.length < 6) {
+        alert('Password must be at least 6 characters long!');
+        return;
+      }
+
+      // Validate username length
+      if (userData.username.length < 3) {
+        alert('Username must be at least 3 characters long!');
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/users/create', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            username: userData.username,
+            password: userData.password,
+            role: userData.role
+          })
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('User created successfully!');
+          // Clear form
+          document.getElementById('addUserForm').reset();
+          closeModal('addUserModal');
+          // Reload the users list with a small delay to ensure backend update
+          setTimeout(() => {
+            loadUsersConfig();
+          }, 100);
+        } else {
+          alert('Error creating user: ' + result.message);
+        }
+      } catch (error) {
+        alert('Connection error occurred');
+        console.error('Create user error:', error);
+      }
+    });
+
+    // Edit User Form Submission
+    document.getElementById('editUserForm').addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const formData = new FormData(this);
+      const userData = {
+        originalUsername: formData.get('originalUsername'),
+        username: formData.get('username'),
+        password: formData.get('password'),
+        role: formData.get('role')
+      };
+
+      // Validate username length
+      if (userData.username.length < 3) {
+        alert('Username must be at least 3 characters long!');
+        return;
+      }
+
+      // Validate password length if provided
+      if (userData.password && userData.password.length < 6) {
+        alert('Password must be at least 6 characters long!');
+        return;
+      }
+
+      try {
+        const updateData = {
+          username: userData.username,
+          role: userData.role
+        };
+
+        // Only include password if provided
+        if (userData.password) {
+          updateData.password = userData.password;
+        }
+
+        const response = await fetch(`/api/users/update/${userData.originalUsername}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(updateData)
+        });
+
+        const result = await response.json();
+        
+        if (result.success) {
+          alert('User updated successfully!');
+          closeModal('editUserModal');
+          // Reload the users list with a small delay
+          setTimeout(() => {
+            loadUsersConfig();
+          }, 100);
+        } else {
+          alert('Error updating user: ' + result.message);
+        }
+      } catch (error) {
+        alert('Connection error occurred');
+        console.error('Update user error:', error);
+      }
+    });
+
+    // ==================== Image Gallery Functions ====================
+    
+    let allGalleryImages = [];
+    let currentSortOrder = 'date'; // 'name' or 'date'
+    let currentPreviewImage = '';
+
+    // Setup Gallery Button Event Listener
+    function setupGalleryButton() {
+      const galleryBtn = document.getElementById('galleryBtn');
+      if (galleryBtn) {
+        console.log('Gallery button found, adding event listener');
+        galleryBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          console.log('Gallery button clicked');
+          openModal('galleryModal');
+          loadGalleryImages();
+        });
+      } else {
+        console.error('Gallery button not found');
+      }
+    }
+
+    // Call setup after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupGalleryButton);
+    } else {
+      setupGalleryButton();
+    }
+
+    // Load images from Img folder
+    async function loadGalleryImages() {
+      console.log('Loading gallery images...');
+      try {
+        const response = await fetch('/api/gallery/images');
+        console.log('API response:', response.status);
+        const result = await response.json();
+        console.log('API result:', result);
+        
+        if (result.success) {
+          allGalleryImages = result.images || [];
+          console.log('Loaded images:', allGalleryImages.length);
+          displayGalleryImages(allGalleryImages);
+        } else {
+          console.error('Failed to load images:', result.error);
+          showGalleryError('Failed to load images: ' + (result.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error loading gallery images:', error);
+        showGalleryError('Connection error: ' + error.message);
+      }
+    }
+
+    // Display images in grid
+    function displayGalleryImages(images) {
+      console.log('Displaying gallery images:', images);
+      const grid = document.getElementById('galleryImageGrid');
+      const countEl = document.getElementById('galleryImageCount');
+      
+      if (!grid) {
+        console.error('Gallery grid element not found');
+        return;
+      }
+      
+      if (!countEl) {
+        console.error('Gallery count element not found');
+        return;
+      }
+      
+      if (!images || images.length === 0) {
+        grid.innerHTML = `
+          <div class="col-span-full text-center py-12 opacity-50">
+            <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
+            </svg>
+            <p>No images found in Img folder</p>
+          </div>
+        `;
+        countEl.textContent = '0 images';
+        return;
+      }
+
+      countEl.textContent = `${images.length} image${images.length > 1 ? 's' : ''}`;
+      console.log('Rendering', images.length, 'images');
+      
+      grid.innerHTML = images.map(img => `
+        <div class="gallery-item relative cursor-pointer" onclick="previewImage('${img.path}', '${img.name}')">
+          <div class="g-thumb">
+            <img
+              src="${img.path}"
+              alt="${img.name}"
+              loading="lazy"
+              onerror="this.src='/public/img/glove_character.png'"
+            />
+          </div>
+          <div class="mt-2 text-center">
+            <div class="g-name truncate" title="${img.name}">${img.name}</div>
+            <div class="g-meta">${formatFileSize(img.size)} &middot; ${formatDate(img.modified)}</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Filter images by search
+    function filterGalleryImages() {
+      const searchInput = document.getElementById('imageSearchInput');
+      const searchTerm = searchInput.value.toLowerCase().trim();
+      
+      if (!searchTerm) {
+        displayGalleryImages(allGalleryImages);
+        return;
+      }
+      
+      const filtered = allGalleryImages.filter(img => 
+        img.name.toLowerCase().includes(searchTerm)
+      );
+      
+      displayGalleryImages(filtered);
+    }
+
+    // Sort images
+    function sortGalleryImages(sortBy) {
+      currentSortOrder = sortBy;
+      
+      const sorted = [...allGalleryImages].sort((a, b) => {
+        if (sortBy === 'name') {
+          return a.name.localeCompare(b.name);
+        } else if (sortBy === 'date') {
+          return new Date(b.modified) - new Date(a.modified);
+        }
+        return 0;
+      });
+      
+      allGalleryImages = sorted;
+      filterGalleryImages(); // Apply current filter after sorting
+    }
+
+    // Refresh gallery
+    function refreshGallery() {
+      document.getElementById('imageSearchInput').value = '';
+      loadGalleryImages();
+    }
+
+    // Preview image in full size
+    function previewImage(imgPath, name) {
+      currentPreviewImage = imgPath;
+      document.getElementById('previewImage').src = currentPreviewImage;
+      document.getElementById('previewImageName').textContent = name;
+      openModal('imagePreviewModal');
+    }
+
+    // Download current preview image
+    function downloadCurrentImage() {
+      if (!currentPreviewImage) return;
+      
+      const link = document.createElement('a');
+      link.href = currentPreviewImage;
+      link.download = currentPreviewImage.split('/').pop();
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Export all images as ZIP
+    async function exportGalleryImages() {
+      const days = prompt('Export ภาพย้อนหลังกี่วัน? (0 = ทั้งหมด)', '0');
+      if (days === null) return;
+      const keepDays = days.trim() === '' ? 0 : parseInt(days);
+      if (isNaN(keepDays) || keepDays < 0) {
+        alert('กรุณาใส่จำนวนวันที่ถูกต้อง');
+        return;
+      }
+      try {
+        const response = await fetch(`/api/gallery/export?days=${keepDays}`);
+        
+        if (!response.ok) {
+          const result = await response.json();
+          alert('Export failed: ' + (result.error || 'Unknown error'));
+          return;
+        }
+        
+        // Get filename from Content-Disposition header
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'ocr-images.zip';
+        if (contentDisposition) {
+          const matches = /filename="(.+)"/.exec(contentDisposition);
+          if (matches && matches[1]) {
+            filename = matches[1];
+          }
+        }
+        
+        // Download the ZIP file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+        
+        alert('Images exported successfully!');
+      } catch (error) {
+        console.error('Error exporting gallery:', error);
+        alert('Export failed: ' + error.message);
+      }
+    }
+
+    // Cleanup old images
+    async function cleanupOldImages() {
+      const days = prompt('ต้องการลบภาพเก่ากว่ากี่วัน? (เช่น 7 = ลบภาพที่เก่ากว่า 7 วัน)', '7');
+      
+      if (days === null) return; // User cancelled
+      
+      const keepDays = days.trim() === '' ? 7 : parseInt(days);
+      
+      if (isNaN(keepDays) || keepDays < 1) {
+        alert('กรุณาใส่จำนวนวันที่มากกว่า 0');
+        return;
+      }
+      
+      if (!confirm(`คุณต้องการลบภาพที่เก่ากว่า ${keepDays} วันหรือไม่?\nการกระทำนี้ไม่สามารถย้อนกลับได้`)) {
+        return;
+      }
+      
+      try {
+        const response = await fetch('/api/gallery/cleanup', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ keepDays }),
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          alert(`${result.message || 'Cleanup completed'}`);
+          refreshGallery(); // Reload gallery after cleanup
+        } else {
+          alert('Cleanup failed: ' + (result.error || 'Unknown error'));
+        }
+      } catch (error) {
+        console.error('Error cleaning up gallery:', error);
+        alert('Cleanup failed: ' + error.message);
+      }
+    }
+
+    // Show error message in gallery
+    function showGalleryError(message) {
+      const grid = document.getElementById('galleryImageGrid');
+      grid.innerHTML = `
+        <div class="col-span-full text-center py-12 text-error">
+          <svg class="w-16 h-16 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
+          </svg>
+          <p>${message}</p>
+        </div>
+      `;
+    }
+
+    // Utility functions
+    function formatFileSize(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+    }
+
+    function formatDate(dateString) {
+      const date = new Date(dateString);
+      const now = new Date();
+      const diffTime = Math.abs(now - date);
+      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+      
+      if (diffDays === 0) return 'Today';
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays} days ago`;
+      
+      return date.toLocaleDateString('th-TH', { 
+        year: 'numeric', 
+        month: 'short', 
+        day: 'numeric' 
+      });
+    }
+
+    // ==================== OCR Test Tool Functions ====================
+    let ocrTestFiles = [];
+    let ocrTestResults = [];
+
+    // Setup OCR Test Button
+    function setupOCRTestButton() {
+      const ocrTestBtn = document.getElementById('ocrTestBtn');
+      if (ocrTestBtn) {
+        console.log('OCR Test button found, adding event listener');
+        ocrTestBtn.addEventListener('click', function(e) {
+          e.preventDefault();
+          console.log('OCR Test button clicked');
+          openModal('ocrTestModal');
+        });
+      } else {
+        console.error('OCR Test button not found');
+      }
+
+      // Setup file input change event
+      const fileInput = document.getElementById('ocrTestFileInput');
+      if (fileInput) {
+        fileInput.addEventListener('change', function(e) {
+          ocrTestFiles = Array.from(e.target.files);
+          const processBtn = document.getElementById('ocrTestProcessBtn');
+          processBtn.disabled = ocrTestFiles.length === 0;
+          
+          if (ocrTestFiles.length > 0) {
+            console.log(`Selected ${ocrTestFiles.length} files for OCR test`);
+          }
+        });
+      }
+    }
+
+    // Call setup after DOM is ready
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', setupOCRTestButton);
+    } else {
+      setupOCRTestButton();
+    }
+
+    // Process OCR Test
+    async function processOCRTest() {
+      if (ocrTestFiles.length === 0) {
+        alert('กรุณาเลือกไฟล์ภาพก่อน');
+        return;
+      }
+
+      // Show progress
+      const progressDiv = document.getElementById('ocrTestProgress');
+      const progressText = document.getElementById('ocrTestProgressText');
+      const processBtn = document.getElementById('ocrTestProcessBtn');
+      const resultsDiv = document.getElementById('ocrTestResults');
+      
+      progressDiv.classList.remove('hidden');
+      processBtn.disabled = true;
+      resultsDiv.classList.add('hidden');
+      ocrTestResults = [];
+
+      try {
+        for (let i = 0; i < ocrTestFiles.length; i++) {
+          const file = ocrTestFiles[i];
+          progressText.textContent = `กำลังประมวลผล ${i + 1}/${ocrTestFiles.length}: ${file.name}...`;
+          
+          const formData = new FormData();
+          formData.append('image', file);
+          
+          const response = await fetch('/api/ocr/test', {
+            method: 'POST',
+            body: formData
+          });
+          
+          const result = await response.json();
+          
+          if (result.success) {
+            ocrTestResults.push({
+              filename: file.name,
+              imageData: result.imageData,
+              detections: result.detections,
+              success: true
+            });
+          } else {
+            ocrTestResults.push({
+              filename: file.name,
+              error: result.error || 'Unknown error',
+              success: false
+            });
+          }
+        }
+
+        // Hide progress and show results
+        progressDiv.classList.add('hidden');
+        displayOCRTestResults();
+        processBtn.disabled = false;
+
+      } catch (error) {
+        console.error('Error processing OCR test:', error);
+        alert('เกิดข้อผิดพลาดในการประมวลผล: ' + error.message);
+        progressDiv.classList.add('hidden');
+        processBtn.disabled = false;
+      }
+    }
+
+    // Display OCR Test Results
+    function displayOCRTestResults() {
+      const resultsDiv = document.getElementById('ocrTestResults');
+      const resultsGrid = document.getElementById('ocrTestResultsGrid');
+      
+      if (ocrTestResults.length === 0) {
+        resultsDiv.classList.add('hidden');
+        return;
+      }
+
+      resultsDiv.classList.remove('hidden');
+      
+      resultsGrid.innerHTML = ocrTestResults.map((result, index) => {
+        if (!result.success) {
+          return `
+            <div class="result-card fail">
+              <div class="result-body">
+                <div class="result-name fail" title="${result.filename}">
+                  <svg class="icon"><use href="#i-alert"/></svg>
+                  <span>${result.filename}</span>
+                </div>
+                <p class="text-xs" style="color: var(--err);">${result.error}</p>
+              </div>
+            </div>
+          `;
+        }
+
+        const detected = result.detections.length > 0;
+        const detectionsHTML = result.detections.map(det =>
+          `<div class="det-badge">
+             <svg class="icon"><use href="#i-check"/></svg>
+             ${det.text} <small>(${det.confidence.toFixed(2)})</small>
+           </div>`
+        ).join(' ');
+
+        return `
+          <div class="result-card ${detected ? 'ok' : ''}">
+            <div class="result-thumb">
+              <img
+                src="data:image/jpeg;base64,${result.imageData}"
+                alt="${result.filename}"
+              />
+            </div>
+            <div class="result-body">
+              <div class="result-name ${detected ? 'ok' : ''}" title="${result.filename}">
+                ${detected ? '<svg class="icon"><use href="#i-check-circle"/></svg>' : ''}
+                <span>${result.filename}</span>
+              </div>
+              <div class="flex flex-wrap gap-1 min-h-[28px]">
+                ${detected
+                  ? detectionsHTML
+                  : '<span class="text-xs italic" style="color: var(--text-3);">อ่านไม่ได้</span>'}
+              </div>
+              <button
+                onclick="downloadOCRResult(${index})"
+                class="btn btn-sm btn-outline w-full"
+              >
+                <svg class="icon"><use href="#i-download"/></svg>
+                ดาวน์โหลด
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Download single OCR result
+    function downloadOCRResult(index) {
+      const result = ocrTestResults[index];
+      if (!result || !result.success) return;
+
+      const link = document.createElement('a');
+      link.href = `data:image/jpeg;base64,${result.imageData}`;
+      link.download = `ocr_result_${result.filename}`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    // Download all OCR results
+    async function downloadAllOCRResults() {
+      if (ocrTestResults.length === 0) {
+        alert('ไม่มีผลลัพธ์ให้ดาวน์โหลด');
+        return;
+      }
+
+      const successResults = ocrTestResults.filter(r => r.success);
+      if (successResults.length === 0) {
+        alert('ไม่มีผลลัพธ์ที่สำเร็จให้ดาวน์โหลด');
+        return;
+      }
+
+      // Download each result sequentially
+      for (let i = 0; i < successResults.length; i++) {
+        downloadOCRResult(ocrTestResults.indexOf(successResults[i]));
+        // Add small delay between downloads
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+
+      alert(`ดาวน์โหลดทั้งหมด ${successResults.length} ไฟล์เรียบร้อย`);
+    }
+
+    // Clear OCR Test Results
+    function clearOCRTestResults() {
+      if (confirm('ต้องการล้างผลลัพธ์ทั้งหมดหรือไม่?')) {
+        ocrTestResults = [];
+        ocrTestFiles = [];
+        document.getElementById('ocrTestFileInput').value = '';
+        document.getElementById('ocrTestProcessBtn').disabled = true;
+        document.getElementById('ocrTestResults').classList.add('hidden');
+        document.getElementById('ocrTestProgress').classList.add('hidden');
+      }
+    }
+
+  </script>
+</body>
+
+</html>

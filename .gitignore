@@ -1,0 +1,18 @@
+dist
+node_modules
+.idea
+result
+temp
+Img/
+logs/
+__pycache__/
+*.pyc
+
+# runtime / device state
+pidlog.json
+python/log.txt
+temp_test_*.jpg
+
+# secrets - never commit
+.env
+config/users.json
