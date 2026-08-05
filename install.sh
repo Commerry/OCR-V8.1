@@ -179,14 +179,27 @@ then
     # Check if requirements.txt exists
     if [ -f "requirements.txt" ]; then
         echo "Installing Python packages from requirements.txt..."
-        python3 -m pip install --user -r requirements.txt
-        echo "✓ Python dependencies installed"
+        # Debian bookworm needs --break-system-packages; keep install non-fatal
+        python3 -m pip install --break-system-packages -r requirements.txt \
+            || python3 -m pip install --user -r requirements.txt \
+            || echo "⚠ Warning: pip install failed - install manually: pip3 install --break-system-packages -r requirements.txt"
+        echo "✓ Python dependencies step finished"
     else
         echo "⚠ Warning: requirements.txt not found, skipping Python dependencies"
     fi
 else
     echo "⚠ Warning: Python 3 is not installed"
     echo "To install Python 3, run: sudo apt-get install python3 python3-pip"
+fi
+echo ""
+
+echo "Step 4.8: Creating .env if missing..."
+# .env is gitignored - fresh clones need one
+if [ ! -f ".env" ] && [ -f ".env.example" ]; then
+    cp .env.example .env
+    echo "✓ Created .env from .env.example"
+else
+    echo "✓ .env already present"
 fi
 echo ""
 
