@@ -3,7 +3,7 @@ node_modules
 .idea
 result
 temp
-Img/
+/Img/
 logs/
 __pycache__/
 *.pyc

@@ -40,6 +40,8 @@ class AuthManager {
             lockoutDuration: 1800,
           },
         };
+        // config/ is not in the repo (users.json is gitignored) - create it
+        fs.mkdirSync(path.dirname(this.usersFilePath), { recursive: true });
         fs.writeFileSync(
           this.usersFilePath,
           JSON.stringify(defaultConfig, null, 2)
