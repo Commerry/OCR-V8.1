@@ -13,17 +13,18 @@
 #   7. pm2 start + enable NEW startup on boot + verify
 #
 # Usage (run from anywhere, ALWAYS pass the current time):
-#   bash update.sh "2026-08-06 21:30:00"
+#   bash update.sh "2026-08-06 21:30:00"                        <- site with direct internet
+#   bash update.sh "2026-08-06 21:30:00" 10.201.0.54:8080       <- site behind a proxy
 set -e
 
-PROXY="http://10.201.0.54:8080"
 REPO="https://github.com/Commerry/OCR-V8.1.git"
 APP_DIR="$HOME/Desktop/OCR-V8.1"
 
 if [ -z "$1" ]; then
     echo "ERROR: ต้องใส่เวลาปัจจุบันทุกครั้ง (กันนาฬิกาเครื่องเพี้ยน)"
-    echo "Usage: bash update.sh \"YYYY-MM-DD HH:MM:SS\""
+    echo "Usage: bash update.sh \"YYYY-MM-DD HH:MM:SS\" [PROXY_IP:PORT]"
     echo "เช่น:  bash update.sh \"2026-08-06 21:30:00\""
+    echo "      bash update.sh \"2026-08-06 21:30:00\" 10.201.0.54:8080"
     exit 1
 fi
 
@@ -31,23 +32,43 @@ echo "===== [0/7] Set clock ====="
 sudo date -s "$1"
 echo "clock = $(date)"
 
-echo "===== [1/7] Set proxy ====="
-npm config set proxy "$PROXY"
-npm config set https-proxy "$PROXY"
-npm config set strict-ssl false
-npm config set registry https://registry.npmjs.org/
-mkdir -p ~/.config/pip
-printf '[global]\nproxy = %s\n' "$PROXY" > ~/.config/pip/pip.conf
-git config --global http.proxy "$PROXY" 2>/dev/null || true
-git config --global https.proxy "$PROXY" 2>/dev/null || true
-echo "Acquire::http::Proxy \"$PROXY/\";
+echo "===== [1/7] Proxy ====="
+if [ -n "$2" ]; then
+    PROXY="http://$2"
+    npm config set proxy "$PROXY"
+    npm config set https-proxy "$PROXY"
+    npm config set strict-ssl false
+    npm config set registry https://registry.npmjs.org/
+    mkdir -p ~/.config/pip
+    printf '[global]\nproxy = %s\n' "$PROXY" > ~/.config/pip/pip.conf
+    git config --global http.proxy "$PROXY" 2>/dev/null || true
+    git config --global https.proxy "$PROXY" 2>/dev/null || true
+    echo "Acquire::http::Proxy \"$PROXY/\";
 Acquire::https::Proxy \"$PROXY/\";" | sudo tee /etc/apt/apt.conf.d/95proxy > /dev/null
-sudo sed -i 's|http://|https://|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
-echo "export http_proxy=$PROXY
+    sudo sed -i 's|http://|https://|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list 2>/dev/null || true
+    echo "export http_proxy=$PROXY
 export https_proxy=$PROXY
 export no_proxy=localhost,127.0.0.1,10.0.0.0/8" | sudo tee /etc/profile.d/proxy.sh > /dev/null
-export http_proxy="$PROXY" https_proxy="$PROXY" no_proxy=localhost,127.0.0.1,10.0.0.0/8
-echo "proxy = $PROXY"
+    export http_proxy="$PROXY" https_proxy="$PROXY" no_proxy=localhost,127.0.0.1,10.0.0.0/8
+    echo "proxy = $PROXY"
+else
+    # no proxy given: clear any proxy left over from a previous run
+    npm config delete proxy 2>/dev/null || true
+    npm config delete https-proxy 2>/dev/null || true
+    git config --global --unset http.proxy 2>/dev/null || true
+    git config --global --unset https.proxy 2>/dev/null || true
+    rm -f ~/.config/pip/pip.conf
+    sudo rm -f /etc/apt/apt.conf.d/95proxy /etc/profile.d/proxy.sh
+    unset http_proxy https_proxy
+    echo "proxy = none (direct internet)"
+fi
+
+echo "-- connectivity check --"
+if ! curl -sm 15 -o /dev/null -w "github: %{http_code}\n" https://raw.githubusercontent.com/ | grep -q "200\|301\|302"; then
+    echo "ERROR: ต่อ github ไม่ได้ - ตรวจ proxy/เครือข่ายก่อน"
+    echo "  ไซต์ที่ใช้ proxy: bash update.sh \"$1\" <PROXY_IP:PORT>"
+    exit 1
+fi
 
 echo "===== [2/7] Download program from GitHub ====="
 if [ -d "$APP_DIR/.git" ]; then
