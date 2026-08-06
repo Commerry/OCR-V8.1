@@ -142,6 +142,12 @@ fi
 mkdir -p logs
 
 echo "===== [7/7] pm2 start + NEW startup ====="
+# cap pm2 logs - an unrotated out.log filled 18GB on a camera
+pm2 install pm2-logrotate 2>&1 | tail -1 || true
+pm2 set pm2-logrotate:max_size 20M 2>/dev/null || true
+pm2 set pm2-logrotate:retain 5 2>/dev/null || true
+pm2 set pm2-logrotate:compress true 2>/dev/null || true
+
 pm2 start ecosystem.config.js
 pm2 save --force
 STARTUP_CMD=$(pm2 startup | grep "sudo env" | cut -d' ' -f2- || true)
