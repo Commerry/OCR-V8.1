@@ -1,87 +1,34 @@
-# คู่มืออัพเดตโปรแกรม OCR บนกล้อง CM4
+# อัพเดตโปรแกรม OCR บนกล้อง CM4
 
-อัพเดตจากเวอร์ชันเก่า → GitHub ล่าสุด ใช้กับกล้องทุกตัว **ทำทีละเครื่อง ตามลำดับส่วนที่ 0 → 7**
-
-| ข้อมูล | ค่า |
-|---|---|
-| โค้ดใหม่ | https://github.com/Commerry/OCR-V8.1 |
-| โฟลเดอร์เก่า | `/home/pi/Desktop/OCR-V8.1` (บางเครื่องชื่ออาจต่าง) |
-| ผู้ใช้ ssh | `pi` / `raspberry` |
-| proxy โรงงาน (เฉพาะไซต์ที่ต้องใช้) | `http://10.201.0.54:8080` |
+ลบโปรแกรมเก่า → ลงโค้ดใหม่จาก GitHub ทำตามลำดับ 1 → 4
 
 ---
 
-## ส่วนที่ 0: เช็คก่อนว่าไซต์นี้ต้องใช้ proxy หรือไม่
-
-```bash
-curl -sm 8 -o /dev/null -w "direct: %{http_code}\n" https://registry.npmjs.org/
-```
-
-- ได้ `200` → ออกเน็ตตรงได้ **ข้ามส่วนที่ 1** ไปส่วนที่ 2 เลย
-- ค้าง/ล้มเหลว → ทำส่วนที่ 1
-
----
-
-## ส่วนที่ 1: ตั้ง proxy (เฉพาะไซต์ที่ต้องใช้)
+## 1. ตั้ง proxy (ข้ามได้ถ้าไซต์นั้นออกเน็ตตรงได้)
 
 ```bash
 PROXY="http://10.201.0.54:8080"
-
 npm config set proxy "$PROXY"
 npm config set https-proxy "$PROXY"
 npm config set strict-ssl false
-
-echo "Acquire::http::Proxy \"$PROXY/\";
-Acquire::https::Proxy \"$PROXY/\";" | sudo tee /etc/apt/apt.conf.d/95proxy
-
-mkdir -p ~/.config/pip
-printf '[global]\nproxy = %s\n' "$PROXY" > ~/.config/pip/pip.conf
-
 git config --global http.proxy "$PROXY"
 git config --global https.proxy "$PROXY"
-
-echo "export http_proxy=$PROXY
-export https_proxy=$PROXY
-export no_proxy=localhost,127.0.0.1,10.0.0.0/8" | sudo tee /etc/profile.d/proxy.sh
-source /etc/profile.d/proxy.sh
-```
-
-ตรวจว่าผ่าน (ต้องได้ `200` ทั้งคู่):
-
-```bash
-curl -sm 8 -o /dev/null -w "npm: %{http_code}\n" https://registry.npmjs.org/
-curl -sm 8 -o /dev/null -w "github: %{http_code}\n" https://raw.githubusercontent.com/Commerry/OCR-V8.1/main/package.json
-```
-
-> proxy บล็อค http ธรรมดา → apt ต้องสลับเป็น https:
-
-```bash
+mkdir -p ~/.config/pip
+printf '[global]\nproxy = %s\n' "$PROXY" > ~/.config/pip/pip.conf
+echo "Acquire::http::Proxy \"$PROXY/\";
+Acquire::https::Proxy \"$PROXY/\";" | sudo tee /etc/apt/apt.conf.d/95proxy
 sudo sed -i 's|http://|https://|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list
 ```
 
----
-
-## ส่วนที่ 2: สำรองค่าตั้งเดิมของเครื่องนี้ (สำคัญมาก — ทำก่อนลบ!)
+ตรวจ (ต้องได้ 200):
 
 ```bash
-mkdir -p ~/ocr-backup
-cp ~/Desktop/OCR-V8.1/config.json          ~/ocr-backup/ 2>/dev/null
-cp ~/Desktop/OCR-V8.1/config/users.json    ~/ocr-backup/ 2>/dev/null
-cp ~/Desktop/OCR-V8.1/.env                 ~/ocr-backup/ 2>/dev/null
-ls -la ~/ocr-backup/
+curl -sm 8 -o /dev/null -w "npm: %{http_code}\n" https://registry.npmjs.org/
 ```
-
-| ไฟล์ | เก็บอะไร |
-|---|---|
-| `config.json` | ค่ากล้อง / crop / PLC / ชื่อกล้อง |
-| `users.json` | บัญชีผู้ใช้ + รหัสผ่าน |
-| `.env` | ค่าระบบ (พอร์ต, python) |
-
-ถ้าต้องการเก็บรูปเก่าด้วย: `cp -r ~/Desktop/OCR-V8.1/Img ~/ocr-backup/Img`
 
 ---
 
-## ส่วนที่ 3: เคลียร์ pm2 startup ของโปรแกรมเก่า
+## 2. เคลียร์ pm2 startup เดิม
 
 ```bash
 pm2 delete all
@@ -92,97 +39,44 @@ pm2 kill
 pkill -f main.py 2>/dev/null; true
 ```
 
-ตรวจว่าเคลียร์แล้ว:
+---
+
+## 3. ลบโปรแกรมเก่า
 
 ```bash
-systemctl is-enabled pm2-pi 2>&1     # ต้องไม่ใช่ enabled
-pm2 list                             # ต้องว่าง
+rm -rf ~/Desktop/OCR-V8.1
 ```
+
+(ค่ากล้อง/บัญชีผู้ใช้จะกลับเป็นค่าเริ่มต้น — login ใหม่ด้วย `Admin` / `Abc123**`)
 
 ---
 
-## ส่วนที่ 4: เก็บโฟลเดอร์เก่า + โหลดโปรแกรมใหม่
+## 4. ลงโค้ดใหม่ + ติดตั้ง
 
 ```bash
-# เปลี่ยนชื่อเก็บไว้ก่อน (ยังไม่ลบจริง - กันเหตุต้องถอยกลับ)
-mv ~/Desktop/OCR-V8.1 ~/Desktop/OCR-V8.1-old
-
 cd ~/Desktop
 git clone https://github.com/Commerry/OCR-V8.1.git
 cd OCR-V8.1
-```
-
----
-
-## ส่วนที่ 5: คืนค่าตั้งเดิม + ติดตั้ง
-
-```bash
-mkdir -p config
-cp ~/ocr-backup/config.json  ./config.json        2>/dev/null
-cp ~/ocr-backup/users.json   ./config/users.json  2>/dev/null
-cp ~/ocr-backup/.env         ./.env               2>/dev/null
-
-# กันบั๊ก npm 11 บน ARM: ใช้ npm 10
 npm install -g npm@10.9.2 2>&1 | tail -2
 hash -r
-
 bash install.sh
 ```
 
-**คำถามระหว่างทางของ install.sh:**
+ตอบคำถามของ install.sh:
 
 | คำถาม | ตอบ |
 |---|---|
-| Node.js v24.14.0 | ถ้ามีแล้วไม่ถาม / ถ้าถามตอบ **y** (ใช้ tarball ในโฟลเดอร์) |
-| Redis reinstall? | **n** (ติดตั้งแล้ว) |
-| Redis install now? | **y** (ถ้าเครื่องยังไม่มี) |
+| Node.js v24.14.0 | **n** ถ้ามี node แล้ว / **y** ถ้ายังไม่มี |
+| Redis reinstall? | **n** |
+| Redis install now? | **y** |
 
-ใกล้จบสคริปต์จะพิมพ์คำสั่ง `sudo env PATH=...` → **copy ไปรัน 1 บรรทัด**
+ใกล้จบสคริปต์พิมพ์คำสั่ง `sudo env PATH=...` → copy ไปรัน 1 บรรทัด
 
----
-
-## ส่วนที่ 6: ตรวจผล
+เสร็จแล้วเช็ค:
 
 ```bash
-pm2 status                            # ocr ต้อง online, restart ไม่วิ่งขึ้นเรื่อยๆ
-curl -s -o /dev/null -w "web: %{http_code}\n" http://localhost:64010/login   # ต้อง 200
-pm2 logs ocr --lines 20 --nostream    # กล้อง start, ไม่มี Traceback วน
-redis-cli ping                        # PONG
+pm2 status
+curl -s -o /dev/null -w "web: %{http_code}\n" http://localhost:64010/login
 ```
 
-เปิดเบราว์เซอร์ `http://<IP กล้อง>:64010`:
-- โลโก้ขึ้น, login ได้ด้วยบัญชีเดิม (เครื่องใหม่: `Admin` / `Abc123**`)
-- ภาพสดขึ้น, ชื่อกล้อง/ค่าตั้งเดิมครบ (มาจาก config.json ที่คืนไว้)
-
----
-
-## ส่วนที่ 7: เก็บกวาด (หลังใช้งานจริงมั่นใจแล้ว เช่น ผ่านไป 1 วัน)
-
-```bash
-rm -rf ~/Desktop/OCR-V8.1-old
-rm -rf ~/ocr-backup
-```
-
----
-
-## ถอยกลับ (rollback) กรณีตัวใหม่มีปัญหา
-
-```bash
-pm2 delete all; pm2 save --force
-mv ~/Desktop/OCR-V8.1 ~/Desktop/OCR-V8.1-broken
-mv ~/Desktop/OCR-V8.1-old ~/Desktop/OCR-V8.1
-cd ~/Desktop/OCR-V8.1 && pm2 start ecosystem.config.js && pm2 save
-```
-
----
-
-## ปัญหาที่เคยเจอ + ทางแก้เร็ว
-
-| # | อาการ | ทางแก้ |
-|---|---|---|
-| 1 | npm ตาย `Exit handler never called` | `rm -rf ~/.npm node_modules` → `npm install -g npm@10.9.2 && hash -r` → `npm install --no-audit --no-fund --legacy-peer-deps` |
-| 2 | npm ค้างที่ `registry.npmmirror.com` / `UNABLE_TO_GET_ISSUER_CERT_LOCALLY` | ใช้โค้ดล่าสุดจาก GitHub (package-lock ชี้ npmjs แล้ว) + `npm config set strict-ssl false` |
-| 3 | `npm error ENOTEMPTY ... rename node_modules/...` | `rm -rf node_modules` แล้ว `npm install` ใหม่ (cache อยู่ครบ รอบสองเร็ว) |
-| 4 | apt `no longer signed` / `403` | นาฬิกาผิด: `sudo date -s "YYYY-MM-DD HH:MM:SS"` → `sudo rm -rf /var/lib/apt/lists/* && sudo apt-get update` / ถ้า 403: สลับ sources เป็น https (ส่วนที่ 1) |
-| 5 | login ไม่ได้ / โลโก้หาย (โค้ดก่อน 2026-08-06) | ใช้โค้ดล่าสุด: มี `config/.gitkeep` + `public/img` + AuthManager สร้างโฟลเดอร์เอง |
-| 6 | กล้องไม่ start (depthai crash วน) | รอ 10-20 วิหลังรีสตาร์ท / เช็คสาย OAK / `pm2 logs ocr` ดู error จริง |
+`online` + `web: 200` = เสร็จ เปิดใช้ที่ `http://<IP กล้อง>:64010`
