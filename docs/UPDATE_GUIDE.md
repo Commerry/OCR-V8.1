@@ -1,82 +1,55 @@
 # อัพเดตโปรแกรม OCR บนกล้อง CM4
 
-ลบโปรแกรมเก่า → ลงโค้ดใหม่จาก GitHub ทำตามลำดับ 1 → 4
+สำหรับเครื่องที่มีโปรแกรมเก่าอยู่แล้ว — ทั้งหมด 2 ขั้น: **clone โค้ดใหม่ → รัน update.sh คำสั่งเดียวจบ**
+(การลบโปรแกรมเก่า ทำเองตามสะดวก — สคริปต์ไม่แตะโฟลเดอร์เก่า)
 
 ---
 
-## 1. ตั้ง proxy (ข้ามได้ถ้าไซต์นั้นออกเน็ตตรงได้)
+## ขั้นที่ 1: Clone โค้ดใหม่จาก GitHub
 
 ```bash
-PROXY="http://10.201.0.54:8080"
-npm config set proxy "$PROXY"
-npm config set https-proxy "$PROXY"
-npm config set strict-ssl false
-git config --global http.proxy "$PROXY"
-git config --global https.proxy "$PROXY"
-mkdir -p ~/.config/pip
-printf '[global]\nproxy = %s\n' "$PROXY" > ~/.config/pip/pip.conf
-echo "Acquire::http::Proxy \"$PROXY/\";
-Acquire::https::Proxy \"$PROXY/\";" | sudo tee /etc/apt/apt.conf.d/95proxy
-sudo sed -i 's|http://|https://|g' /etc/apt/sources.list /etc/apt/sources.list.d/*.list
-```
-
-ตรวจ (ต้องได้ 200):
-
-```bash
-curl -sm 8 -o /dev/null -w "npm: %{http_code}\n" https://registry.npmjs.org/
-```
-
----
-
-## 2. เคลียร์ pm2 startup เดิม
-
-```bash
-pm2 delete all
-pm2 save --force
-sudo env PATH=$PATH:/usr/local/bin:$HOME/.npm-global/bin:$HOME/.local/bin \
-  $(command -v pm2) unstartup systemd -u pi --hp /home/pi 2>/dev/null || pm2 unstartup systemd
-pm2 kill
-pkill -f main.py 2>/dev/null; true
-```
-
----
-
-## 3. ลบโปรแกรมเก่า
-
-```bash
-rm -rf ~/Desktop/OCR-V8.1
-```
-
-(ค่ากล้อง/บัญชีผู้ใช้จะกลับเป็นค่าเริ่มต้น — login ใหม่ด้วย `Admin` / `Abc123**`)
-
----
-
-## 4. ลงโค้ดใหม่ + ติดตั้ง
-
-```bash
+git config --global http.proxy http://10.201.0.54:8080
+git config --global https.proxy http://10.201.0.54:8080
 cd ~/Desktop
 git clone https://github.com/Commerry/OCR-V8.1.git
 cd OCR-V8.1
-npm install -g npm@10.9.2 2>&1 | tail -2
-hash -r
-bash install.sh
 ```
 
-ตอบคำถามของ install.sh:
+(ไซต์ที่ออกเน็ตตรงได้: ข้าม 2 บรรทัดแรกได้)
 
-| คำถาม | ตอบ |
-|---|---|
-| Node.js v24.14.0 | **n** ถ้ามี node แล้ว / **y** ถ้ายังไม่มี |
-| Redis reinstall? | **n** |
-| Redis install now? | **y** |
+---
 
-ใกล้จบสคริปต์พิมพ์คำสั่ง `sudo env PATH=...` → copy ไปรัน 1 บรรทัด
-
-เสร็จแล้วเช็ค:
+## ขั้นที่ 2: รัน update.sh — **ต้องใส่เวลาปัจจุบันทุกครั้ง**
 
 ```bash
-pm2 status
-curl -s -o /dev/null -w "web: %{http_code}\n" http://localhost:64010/login
+bash update.sh "2026-08-06 21:30:00"
 ```
 
-`online` + `web: 200` = เสร็จ เปิดใช้ที่ `http://<IP กล้อง>:64010`
+แก้เวลาในเครื่องหมายคำพูดเป็น**เวลาจริงขณะรัน** (`"ปี-เดือน-วัน ชั่วโมง:นาที:วินาที"`) — สคริปต์จะตั้งนาฬิกาเครื่องเป็นค่านี้ก่อนเสมอ ไม่ว่านาฬิกาเดิมตรงหรือไม่ (ถ้าไม่ใส่เวลา สคริปต์จะไม่รันและแสดงตัวอย่างให้)
+
+สคริปต์ทำให้อัตโนมัติทั้งหมด ไม่มีคำถามระหว่างทาง:
+
+| ขั้น | ทำอะไร |
+|---|---|
+| 0 | ตั้งนาฬิกาเครื่องตามเวลาที่ใส่มา |
+| 1 | เซ็ต proxy `10.201.0.54:8080` (npm / pip / git / apt / env) |
+| 2 | เช็ค Node — ไม่มีหรือเก่าเกิน ลงจาก tarball ในโฟลเดอร์ให้เอง |
+| 3 | เคลียร์ pm2 startup เดิม (ไม่สนชื่อ/path โปรแกรมเก่า) |
+| 4 | ติดตั้ง redis ถ้ายังไม่มี |
+| 5 | ลง dependencies (สลับ npm 11 → 10 เองถ้าจำเป็น) |
+| 6 | ลง python packages + สร้าง `.env` |
+| 7 | pm2 start + ตั้ง startup ใหม่ (auto-start ตอนบูต) |
+| จบ | ตรวจตัวเอง แล้วรายงานผล |
+
+---
+
+## ผลที่ต้องเห็นตอนจบ
+
+```
+UPDATE COMPLETE - ready to use
+  http://<IP กล้อง>:64010
+```
+
+เปิดเบราว์เซอร์ตาม URL → login `Admin` / `Abc123**`
+
+ถ้าขึ้น `UPDATE FAILED` → รัน `pm2 logs ocr --lines 30` แล้วดู error

@@ -11,14 +11,25 @@
 #   6. python deps + .env
 #   7. pm2 start + enable NEW startup on boot + verify
 #
-# Usage: run INSIDE the new program folder:
-#   bash update.sh
+# Usage: run INSIDE the new program folder, ALWAYS passing the current time:
+#   bash update.sh "2026-08-06 21:30:00"
 set -e
 
 PROXY="http://10.201.0.54:8080"
 
+if [ -z "$1" ]; then
+    echo "ERROR: ต้องใส่เวลาปัจจุบันทุกครั้ง (กันนาฬิกาเครื่องเพี้ยน)"
+    echo "Usage: bash update.sh \"YYYY-MM-DD HH:MM:SS\""
+    echo "เช่น:  bash update.sh \"2026-08-06 21:30:00\""
+    exit 1
+fi
+
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
+
+echo "===== [0/7] Set clock ====="
+sudo date -s "$1"
+echo "clock = $(date)"
 
 echo "===== [1/7] Set proxy ====="
 npm config set proxy "$PROXY"
