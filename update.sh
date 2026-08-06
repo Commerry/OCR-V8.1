@@ -2,20 +2,23 @@
 # One-shot updater for cameras that ALREADY have an old program installed.
 # Does NOT touch/delete old program folders (do that yourself).
 #
-# What it does, in order:
-#   1. set factory proxy (npm/pip/git/apt/env) for package installation
-#   2. install Node if missing (from the tarball in this folder)
-#   3. clear the OLD pm2 startup - works whatever the old app name/path was
-#   4. install redis if missing
-#   5. install npm dependencies (auto-downgrades npm 11 -> 10, known ARM bug)
+# Order matters: clock -> proxy -> download (clone) -> install.
+#   0. set the clock (wrong clock breaks TLS/apt)
+#   1. set factory proxy (npm/pip/git/apt/env)
+#   2. clone/update the program from GitHub
+#   3. install Node if missing (tarball from the repo)
+#   4. clear the OLD pm2 startup - whatever the old app name/path was
+#   5. redis + npm dependencies (auto-downgrades npm 11 -> 10, known ARM bug)
 #   6. python deps + .env
 #   7. pm2 start + enable NEW startup on boot + verify
 #
-# Usage: run INSIDE the new program folder, ALWAYS passing the current time:
+# Usage (run from anywhere, ALWAYS pass the current time):
 #   bash update.sh "2026-08-06 21:30:00"
 set -e
 
 PROXY="http://10.201.0.54:8080"
+REPO="https://github.com/Commerry/OCR-V8.1.git"
+APP_DIR="$HOME/Desktop/OCR-V8.1"
 
 if [ -z "$1" ]; then
     echo "ERROR: ต้องใส่เวลาปัจจุบันทุกครั้ง (กันนาฬิกาเครื่องเพี้ยน)"
@@ -23,9 +26,6 @@ if [ -z "$1" ]; then
     echo "เช่น:  bash update.sh \"2026-08-06 21:30:00\""
     exit 1
 fi
-
-SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-cd "$SCRIPT_DIR"
 
 echo "===== [0/7] Set clock ====="
 sudo date -s "$1"
@@ -49,7 +49,22 @@ export no_proxy=localhost,127.0.0.1,10.0.0.0/8" | sudo tee /etc/profile.d/proxy.
 export http_proxy="$PROXY" https_proxy="$PROXY" no_proxy=localhost,127.0.0.1,10.0.0.0/8
 echo "proxy = $PROXY"
 
-echo "===== [2/7] Node.js ====="
+echo "===== [2/7] Download program from GitHub ====="
+if [ -d "$APP_DIR/.git" ]; then
+    cd "$APP_DIR"
+    git fetch origin main
+    git reset --hard origin/main
+    echo "updated existing clone: $APP_DIR"
+else
+    mkdir -p "$(dirname "$APP_DIR")"
+    rm -rf "$APP_DIR"
+    git clone "$REPO" "$APP_DIR"
+    cd "$APP_DIR"
+    echo "cloned: $APP_DIR"
+fi
+git log --oneline -1
+
+echo "===== [3/7] Node.js ====="
 NODE_TARBALL="node-v24.14.0-linux-arm64.tar.xz"
 if command -v node > /dev/null && [ "$(node -v | sed 's/^v//' | cut -d. -f1)" -ge 18 ]; then
     echo "node $(node -v) - ok"
@@ -64,7 +79,7 @@ else
     exit 1
 fi
 
-echo "===== [3/7] Clear OLD pm2 startup ====="
+echo "===== [4/7] Clear OLD pm2 startup ====="
 if command -v pm2 > /dev/null; then
     pm2 delete all 2>/dev/null || true
     pm2 save --force 2>/dev/null || true
@@ -75,7 +90,7 @@ sudo systemctl disable "pm2-$USER" 2>/dev/null || true
 pkill -f main.py 2>/dev/null || true
 echo "old pm2 startup cleared"
 
-echo "===== [4/7] Redis ====="
+echo "===== [5/7] Redis + npm dependencies ====="
 if ! command -v redis-server > /dev/null; then
     sudo apt-get update -o Acquire::http::No-Cache=true || true
     sudo DEBIAN_FRONTEND=noninteractive apt-get install -y redis-server
@@ -83,7 +98,7 @@ fi
 sudo systemctl enable --now redis-server
 redis-cli ping
 
-echo "===== [5/7] npm dependencies ====="
+echo "-- npm dependencies --"
 # npm 11 has a fatal bug on ARM ("Exit handler never called") - use npm 10
 if [ "$(npm -v | cut -d. -f1)" -ge 11 ]; then
     npm install -g npm@10.9.2 2>&1 | tail -1 || true
