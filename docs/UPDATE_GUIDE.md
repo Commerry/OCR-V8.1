@@ -8,15 +8,20 @@
 ## กรณีที่ 1: ไซต์ที่ต้องผ่าน proxy
 
 ```bash
-curl -x http://10.201.0.54:3128 -sL -o /tmp/update.sh https://raw.githubusercontent.com/Commerry/OCR-V8.1/main/update.sh
-bash /tmp/update.sh "2026-08-06 23:30:00" 10.201.0.54:3128
+curl -x http://10.201.0.54:8080 -sL -o /tmp/update.sh https://raw.githubusercontent.com/Commerry/OCR-V8.1/main/update.sh
+bash /tmp/update.sh "2026-08-13 09:27:00" 10.201.0.54:8080
 ```
+```bash
+curl -x http://10.201.0.54:3128 -sL -o /tmp/update.sh https://raw.githubusercontent.com/Commerry/OCR-V8.1/main/update.sh
+bash /tmp/update.sh "2026-08-13 09:28:00" 10.201.0.54:3128
+```
+
 
 ## กรณีที่ 2: ไซต์ที่ออกเน็ตตรงได้ (ไม่ต้อง proxy)
 
 ```bash
 curl -sL -o /tmp/update.sh https://raw.githubusercontent.com/Commerry/OCR-V8.1/main/update.sh
-bash /tmp/update.sh "2026-08-06 23:30:00"
+bash /tmp/update.sh "2026-08-10 14:45:00"
 ```
 
 **สิ่งที่ต้องแก้ทุกครั้ง:** เวลาในเครื่องหมายคำพูด → ใส่**เวลาจริงขณะรัน** (`"ปี-เดือน-วัน ชม:นาที:วินาที"`)
