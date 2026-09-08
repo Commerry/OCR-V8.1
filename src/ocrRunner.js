@@ -239,6 +239,8 @@ const ocrRunner = (io) => {
         camera: cameraName,
         value: data,
         confidence: messageList[2] ? parseFloat(messageList[2]) : null,
+        // weight the PLC reported closest to this read (published every 0.5s)
+        weight: typeof cameraTelemetry.weight === 'number' ? cameraTelemetry.weight : null,
         at: new Date().toISOString(),
       };
       cameraTelemetry.lastRead = read;

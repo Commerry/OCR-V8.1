@@ -37,6 +37,8 @@ import {
  *     "running": true,                          // python process alive
  *     "started": true,                          // camera produced frames
  *     "plcEnabled": true,
+ *     "ocrModel": "29_04",                      // '' = default model
+ *     "letterRead": false,                      // A-Z prefix reading on/off
  *     "plcConnected": true,                     // TRUE/FALSE per plc_status
  *     "lastRead": { "value": "123", "confidence": 0.97, "at": "..." },
  *     "weight": 12.345,
@@ -44,7 +46,7 @@ import {
  *     "lastImageAt": "..."
  *   }],
  *   "recentReads": [                            // history since last heartbeat
- *     { "camera": "in", "value": "123", "confidence": 0.97, "at": "..." }
+ *     { "camera": "in", "value": "123", "confidence": 0.97, "weight": 12.3, "at": "..." }
  *   ],
  *   "health": {
  *     "platform": "linux", "uptimeSec": 123456,
@@ -96,6 +98,9 @@ const buildPayload = async (includeImage) => {
       running: !!status.running,
       started: !!status.started,
       plcEnabled: cameraConfig.enablePlc === '1',
+      // which OCR model produced these reads ('' = the default blob)
+      ocrModel: cameraConfig.ocrModel || '',
+      letterRead: cameraConfig.enableLetterRead === '1',
       plcConnected: typeof cameraTelemetry.plcConnected === 'boolean' ? cameraTelemetry.plcConnected : null,
       lastRead: cameraTelemetry.lastRead || null,
       weight: typeof cameraTelemetry.weight === 'number' ? cameraTelemetry.weight : null,
