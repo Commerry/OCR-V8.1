@@ -128,12 +128,43 @@ sudo apt install -y sshpass          # ครั้งแรกครั้ง�
 bash update-fleet.sh --from-db ~/Desktop/OCR-Center-main -u pi -p raspberry -j 2
 ```
 
+**คอนฟิกของแต่ละไซต์ไม่ถูกแตะ**
+
+`config.json` (ชื่อกล้อง, ชื่อที่โชว์บนเว็บ, IP ของ PLC, ค่าครอป, โฟกัส, โมเดล, URL/Key ของ Center) ถูกถอดออกจาก git แล้ว — git ไม่ track อีกต่อไป อัปกี่ครั้งก็ไม่ทับ
+
+ระหว่างอัป สคริปต์ยังคัดลอกไฟล์เหล่านี้ออกไปพักไว้แล้วเอากลับมาหลังอัปเสร็จ (จำเป็นสำหรับเครื่องที่ยังใช้เวอร์ชันเก่าซึ่ง git เคย track `config.json` อยู่):
+
+| ไฟล์ | เก็บอะไร |
+|---|---|
+| `config.json` | ตั้งค่ากล้อง/PLC/ครอป/โมเดล/Center ของไซต์นั้น |
+| `config/users.json` | บัญชีผู้ใช้เว็บของเครื่องนั้น |
+| `.env` | ค่าเฉพาะเครื่อง |
+| `Img/`, `logs/`, `pidlog.json` | รูปที่เซฟไว้และ log — อยู่ใน `.gitignore` git ไม่แตะอยู่แล้ว |
+
+เครื่องที่ยังไม่มี `config.json` เลย จะได้จาก `config.example.json` ให้อัตโนมัติ
+
 **สิ่งที่สคริปต์ทำบนกล้องแต่ละตัว**
 
 1. `git fetch origin main` — ถ้าติด certificate (proxy ตัดกลาง SSL) จะลองใหม่แบบข้ามการตรวจ cert ให้เอง
 2. `git reset --hard origin/main` — ทับเฉพาะไฟล์โค้ด `config.json` รูปที่เก็บไว้ และ pm2 startup ไม่ถูกแตะ
-3. `pm2 restart ocr`
-4. รายงานคอมมิตที่ได้ + สถานะ pm2
+3. เอา `config.json` / `config/users.json` / `.env` ของไซต์กลับคืน
+4. `pm2 restart ocr`
+5. รายงานว่าไฟล์ไหนเปลี่ยนบ้าง (`git diff --stat`), คอมมิตที่ได้, กล้องที่อยู่ใน config และสถานะ pm2
+
+ตัวอย่างผลลัพธ์ต่อกล้อง 1 ตัว:
+
+```
+===== 10.1.100.61 [OK] =====
+    changed files:
+      python/main.py               |  12 ++++
+      src/ocrRunner.js             |  31 ++++++++-
+      src/utils/centralReporter.js |  14 +++-
+    OK: 299b3c4 Send one image per read, and add a fleet updater
+    cameras in config: LINE-A-IN
+    status: online
+```
+
+เห็นชัดว่าแตะเฉพาะไฟล์โค้ด และชื่อกล้องในคอนฟิกยังเป็นของเดิม
 
 จบแล้วสรุปท้ายจอว่าอัปสำเร็จกี่ตัว ล้มกี่ตัว พร้อม log 6 บรรทัดสุดท้ายของตัวที่ล้ม
 
