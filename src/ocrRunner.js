@@ -15,6 +15,9 @@ const lastConfigUpdated = {};
 const telemetry = {};
 const recentReads = []; // ring buffer of final OCR results (values sent to PLC)
 const MAX_RECENT_READS = 100;
+// Each read carries the frame it was read from. Images are the heavy part of a
+// heartbeat, so only the newest ones keep theirs.
+const MAX_READS_WITH_IMAGE = 20;
 
 const getCameraTelemetry = (cameraName) => {
   if (!telemetry[cameraName]) {
@@ -24,6 +27,7 @@ const getCameraTelemetry = (cameraName) => {
       plcConnected: null,
       lastImage: null, // webp base64 of last read frame
       lastImageAt: null,
+      pendingImage: null, // frame of the read that is about to be published
     };
   }
   return telemetry[cameraName];
@@ -211,7 +215,9 @@ const ocrRunner = (io) => {
     if (err && err.code === 'ECONNREFUSED') return; // redis not up yet - retry quietly
     console.error('redis error:', err.message);
   });
-  subRedis.subscribe(['ocr_frame', 'ocr_frame_last', 'plc_status', 'plc_weight', 'ocr_result']);
+  subRedis.subscribe([
+    'ocr_frame', 'ocr_frame_last', 'ocr_read_image', 'plc_status', 'plc_weight', 'ocr_result',
+  ]);
   subRedis.on('message', async (channel, message) => {
 
     if (channel === 'plc_status') {
@@ -234,19 +240,36 @@ const ocrRunner = (io) => {
     } else if (channel === 'ocr_frame_last') {
       cameraTelemetry.lastImage = data;
       cameraTelemetry.lastImageAt = new Date().toISOString();
+    } else if (channel === 'ocr_read_image') {
+      // python sends this right before the result it belongs to
+      cameraTelemetry.pendingImage = data;
     } else if (channel === 'ocr_result') {
+      const at = new Date().toISOString();
       const read = {
         camera: cameraName,
         value: data,
         confidence: messageList[2] ? parseFloat(messageList[2]) : null,
         // weight the PLC reported closest to this read (published every 0.5s)
         weight: typeof cameraTelemetry.weight === 'number' ? cameraTelemetry.weight : null,
-        at: new Date().toISOString(),
+        at,
       };
-      cameraTelemetry.lastRead = read;
+      if (cameraTelemetry.pendingImage) {
+        read.image = cameraTelemetry.pendingImage;
+        cameraTelemetry.pendingImage = null;
+        // the dashboard shows this too, so the preview switch is no longer needed
+        cameraTelemetry.lastImage = read.image;
+        cameraTelemetry.lastImageAt = at;
+      }
+      cameraTelemetry.lastRead = { ...read, image: undefined };
       recentReads.push(read);
       if (recentReads.length > MAX_RECENT_READS) {
         recentReads.splice(0, recentReads.length - MAX_RECENT_READS);
+      }
+      // drop images from all but the newest reads so a backlog stays small
+      const withImage = recentReads.filter((entry) => entry.image);
+      if (withImage.length > MAX_READS_WITH_IMAGE) {
+        withImage.slice(0, withImage.length - MAX_READS_WITH_IMAGE)
+          .forEach((entry) => { delete entry.image; });
       }
     }
 

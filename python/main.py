@@ -603,6 +603,18 @@ if __name__ == "__main__":
                         queue_list["write"].get()
                     print(f"[Result] Queueing OCR result: {read_display_value}, conf={curent_confidence_avg}", flush=True)
                     queue_list["write"].put_nowait([last_current_read_text, curent_confidence_avg])
+                    # Publish the frame of THIS read, before the result itself, so the
+                    # web server can pair them. Independent of the preview switch and of
+                    # local file saving: the central server needs one image per read.
+                    # Nothing is sent when no number was seen in the trigger.
+                    if best_bbox_frame is not None:
+                        try:
+                            read_frame = draw(best_bbox_frame.copy(), best_bbox, crop_points,
+                                              read_display_value, best_bbox_conf)
+                            send_frame(r, "ocr_read_image", camera_name, read_frame)
+                        except Exception as e:
+                            log(f"{camera_name}: read image publish error: {e}")
+
                     # publish final result for web UI / central server (with prefix when read)
                     try:
                         conf_str = f"{curent_confidence_avg:.4f}" if curent_confidence_avg is not None else ""

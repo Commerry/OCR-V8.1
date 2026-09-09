@@ -46,7 +46,8 @@ import {
  *     "lastImageAt": "..."
  *   }],
  *   "recentReads": [                            // history since last heartbeat
- *     { "camera": "in", "value": "123", "confidence": 0.97, "weight": 12.3, "at": "..." }
+ *     { "camera": "in", "value": "123", "confidence": 0.97, "weight": 12.3, "at": "...",
+ *       "image": "<webp base64>" }                // frame of that read, when available
  *   ],
  *   "health": {
  *     "platform": "linux", "uptimeSec": 123456,
@@ -125,7 +126,11 @@ const buildPayload = async (includeImage) => {
       appVersion,
     },
     cameras,
-    recentReads: getRecentReads(),
+    // one image per read - the central stores them for its reports.
+    // includeImage off = values only, no pictures leave the device.
+    recentReads: getRecentReads().map((read) => (
+      includeImage ? read : { ...read, image: undefined }
+    )),
     health: await getSystemHealth(),
   };
 };
