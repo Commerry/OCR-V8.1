@@ -127,6 +127,13 @@ if [ "$(npm -v | cut -d. -f1)" -ge 11 ]; then
 fi
 echo "npm $(npm -v)"
 rm -rf node_modules
+# per-site settings live in config.json, which git does not track.
+# A fresh device starts from the example; an existing one keeps its own.
+if [ ! -f config.json ] && [ -f config.example.json ]; then
+    cp config.example.json config.json
+    echo "created config.json from config.example.json"
+fi
+
 npm install --no-audit --no-fund --legacy-peer-deps
 chmod +x node_modules/.bin/*
 npm run build || echo "warn: build failed (app runs from src - continuing)"

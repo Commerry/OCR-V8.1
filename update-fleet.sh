@@ -21,8 +21,10 @@
 #   -j N           how many cameras at a time          (default: 4)
 #   --dry-run      only show what would run
 #
-# Nothing is deleted and no config is touched: the cameras keep their
-# config.json, their saved images and their pm2 startup entry.
+# Per-site files are protected: config.json (camera names, PLC address, crop,
+# display names, central URL), config/users.json, .env and the Img/ folder are
+# copied aside before the update and put back afterwards, so only program code
+# changes. Nothing is deleted and the pm2 startup entry is left alone.
 # ---------------------------------------------------------------------------
 set -u
 
@@ -93,9 +95,34 @@ if ! git fetch origin main >/tmp/ocr-fetch.log 2>&1; then
         echo "FETCH FAILED:"; tail -3 /tmp/ocr-fetch.log; exit 4;
     }
 fi
+# Keep the settings of this site. config.json used to be tracked by git, so
+# an update would otherwise overwrite the camera name, PLC address, crop and
+# central URL of every device.
+KEEP_DIR=\$(mktemp -d)
+for f in config.json config/users.json .env; do
+    [ -f "\$f" ] && mkdir -p "\$KEEP_DIR/\$(dirname \$f)" && cp -a "\$f" "\$KEEP_DIR/\$f"
+done
+
+BEFORE=\$(git rev-parse HEAD)
 git reset --hard origin/main >/dev/null
+
+# put the site settings back, whatever the update did to them
+for f in config.json config/users.json .env; do
+    [ -f "\$KEEP_DIR/\$f" ] && mkdir -p "\$(dirname \$f)" && cp -a "\$KEEP_DIR/\$f" "\$f"
+done
+rm -rf "\$KEEP_DIR"
+
+if [ ! -s config.json ] && [ -f config.example.json ]; then
+    cp config.example.json config.json
+    echo "note: this device had no config.json - started one from the example"
+fi
+
+echo "changed files:"
+git diff --stat "\$BEFORE" HEAD | tail -8 | sed 's/^/  /'
+
 pm2 restart $PM2_NAME >/dev/null
 echo "OK: \$(git log --oneline -1)"
+echo "cameras in config: \$(node -e "try{const c=require('./config.json');console.log(Object.keys(c.cameraList||{}).join(', ')||'(none)')}catch(e){console.log('(unreadable)')}" 2>/dev/null)"
 pm2 describe $PM2_NAME | grep -E "status" | head -1
 REMOTE
 )

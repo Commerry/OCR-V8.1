@@ -156,6 +156,13 @@ echo "✓ Cache cleaned"
 echo ""
 
 echo "Step 2: Installing dependencies..."
+# per-site settings live in config.json, which git does not track.
+# A fresh device starts from the example; an existing one keeps its own.
+if [ ! -f config.json ] && [ -f config.example.json ]; then
+    cp config.example.json config.json
+    echo "created config.json from config.example.json"
+fi
+
 npm install --prefer-offline --no-audit --legacy-peer-deps
 echo "✓ Dependencies installed"
 echo ""

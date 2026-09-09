@@ -16,3 +16,8 @@ temp_test_*.jpg
 # secrets - never commit
 .env
 config/users.json
+
+# per-site settings: cameras, PLC addresses, crop, display names, central URL.
+# Each device owns its own copy - never let an update overwrite it.
+# A fresh install copies config.example.json instead.
+/config.json
