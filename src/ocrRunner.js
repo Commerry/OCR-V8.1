@@ -273,6 +273,10 @@ const ocrRunner = (io) => {
       }
     }
 
+    // the per-read image is for the central server only - no page listens for
+    // it, and it is ~100 KB of base64 per read
+    if (channel === 'ocr_read_image') return;
+
     io.emit(`${channel}_${cameraName}`, {
       data,
     });

@@ -21,3 +21,8 @@ config/users.json
 # Each device owns its own copy - never let an update overwrite it.
 # A fresh install copies config.example.json instead.
 /config.json
+
+# editor
+.vscode/
+# windows reserved-name file that stray shell redirects create
+nul
