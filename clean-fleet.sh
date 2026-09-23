@@ -23,6 +23,7 @@
 #   --from-db DIR   hosts from the center's database
 #   -u USER         ssh user                        (default: pi)
 #   -p PASSWORD     ssh + sudo password, needs sshpass
+#   --sudo-pass P   sudo password only (use with ssh keys, no sshpass needed)
 #   -d DIR          program folder on the camera    (default: ~/Desktop/OCR-V8.1)
 #   -n NAME         pm2 process name                (default: ocr)
 #   -j N            how many cameras at a time      (default: 4)
@@ -34,6 +35,7 @@ set -u
 
 SSH_USER="pi"
 SSH_PASS=""
+SUDO_PASS=""
 APP_DIR="~/Desktop/OCR-V8.1"
 PM2_NAME="ocr"
 JOBS=4
@@ -68,6 +70,7 @@ while [ $# -gt 0 ]; do
                        shift 2 ;;
         -u)            SSH_USER="$2"; shift 2 ;;
         -p)            SSH_PASS="$2"; shift 2 ;;
+        --sudo-pass)   SUDO_PASS="$2"; shift 2 ;;
         -d)            APP_DIR="$2"; shift 2 ;;
         -n)            PM2_NAME="$2"; shift 2 ;;
         -j)            JOBS="$2"; shift 2 ;;
@@ -82,9 +85,11 @@ done
 SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=10"
 SSH_CMD="ssh"
 if [ -n "$SSH_PASS" ]; then
-    command -v sshpass >/dev/null 2>&1 || die "-p needs sshpass (sudo apt install -y sshpass)"
+    command -v sshpass >/dev/null 2>&1 || die "-p needs sshpass (sudo apt install -y sshpass), or use ssh keys plus --sudo-pass"
     SSH_CMD="sshpass -p $SSH_PASS ssh"
 fi
+# -p covers both by default; --sudo-pass is for key-based logins
+[ -z "$SUDO_PASS" ] && SUDO_PASS="$SSH_PASS"
 
 # ---------------------------------------------------------------------------
 # What runs on each camera. Sent over stdin, so nothing here needs escaping;
@@ -200,7 +205,7 @@ if [ -n "${SUDO_PASS:-}" ]; then
     do_rm "echo '$SUDO_PASS' | sudo -S find /var/log -type f \\( -name '*.gz' -o -name '*.[0-9]' -o -name '*.old' \\) -delete"
   fi
 else
-  echo "   (ข้าม apt cache และ journal - ไม่ได้ใส่รหัส sudo ด้วย -p)"
+  echo "   (ข้าม apt cache และ journal - ไม่ได้ใส่รหัส sudo: ใช้ -p หรือ --sudo-pass)"
 fi
 
 # 6. saved images, only when asked
@@ -240,7 +245,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 
 run_one() {
     local host="$1"
-    local env_prefix="APP_DIR='$APP_DIR' PM2_NAME='$PM2_NAME' MODE='$MODE' IMAGES_DAYS='$IMAGES_DAYS' DO_RESTART='$DO_RESTART' SUDO_PASS='$SSH_PASS'"
+    local env_prefix="APP_DIR='$APP_DIR' PM2_NAME='$PM2_NAME' MODE='$MODE' IMAGES_DAYS='$IMAGES_DAYS' DO_RESTART='$DO_RESTART' SUDO_PASS='$SUDO_PASS'"
     if echo "$REMOTE_BODY" | $SSH_CMD $SSH_OPTS "$SSH_USER@$host" "$env_prefix bash -s" >"$TMP_DIR/$host.log" 2>&1; then
         echo OK > "$TMP_DIR/$host.status"
     else
