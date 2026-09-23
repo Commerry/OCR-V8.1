@@ -37,6 +37,7 @@ param(
     [switch]   $DryRun,
     [switch]   $Restart,
     [switch]   $SetupKeys,
+    [string]   $IdentityFile,
     [string]   $Plink,
     [string]   $Password = 'raspberry'
 )
@@ -75,7 +76,9 @@ if ($SetupKeys) {
     $cmd = "mkdir -p ~/.ssh; chmod 700 ~/.ssh; echo '$pub' >> ~/.ssh/authorized_keys; sort -u -o ~/.ssh/authorized_keys ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; echo KEY_OK"
     foreach ($h in $Hosts) {
         Write-Host "ติดตั้ง key บน $h (ใส่รหัส $User ครั้งเดียว)" -ForegroundColor Cyan
-        & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 "$User@$h" $cmd
+        $keyArgs = @('-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL', '-o', 'ConnectTimeout=10')
+        if ($IdentityFile) { $keyArgs += @('-o', 'IdentitiesOnly=no') }
+        & ssh @keyArgs "$User@$h" $cmd
         if ($LASTEXITCODE -ne 0) {
             Write-Host "  ไม่สำเร็จ - ทำมือได้ด้วย:  type `$env:USERPROFILE\.ssh\id_ed25519.pub | ssh $User@$h `"cat >> ~/.ssh/authorized_keys`"" -ForegroundColor Yellow
         }
@@ -188,7 +191,7 @@ Write-Host "mode    : $mode$(if ($ImagesDays -gt 0) { "   images older than ${Im
 Write-Host ''
 
 $script = {
-    param($h, $user, $remote, $envPrefix, $plink, $password)
+    param($h, $user, $remote, $envPrefix, $plink, $password, $identity)
     # a broken connection writes to stderr; keep it as output instead of
     # turning it into a PowerShell error record
     $ErrorActionPreference = 'Continue'
@@ -200,8 +203,11 @@ $script = {
             if ($plink) {
                 $out = $body | & $plink -ssh -batch -pw $password "$user@$h" "$envPrefix bash -s" 2>&1
             } else {
-                $out = $body | & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL `
-                    -o ConnectTimeout=10 -o BatchMode=yes "$user@$h" "$envPrefix bash -s" 2>&1
+                $sshArgs = @('-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL',
+                             '-o', 'ConnectTimeout=10', '-o', 'BatchMode=yes')
+                if ($identity) { $sshArgs += @('-i', $identity) }
+                $sshArgs += @("$user@$h", "$envPrefix bash -s")
+                $out = $body | & ssh @sshArgs 2>&1
             }
             $code = $LASTEXITCODE
         } catch {
@@ -225,7 +231,7 @@ $results = @()
 while ($queue.Count -gt 0 -or $running.Count -gt 0) {
     while ($queue.Count -gt 0 -and $running.Count -lt $Jobs) {
         $h = $queue.Dequeue()
-        $running += Start-Job -ScriptBlock $script -ArgumentList $h, $User, $remote, $envPrefix, $Plink, $Password
+        $running += Start-Job -ScriptBlock $script -ArgumentList $h, $User, $remote, $envPrefix, $Plink, $Password, $IdentityFile
     }
     $done = $running | Where-Object { $_.State -ne 'Running' }
     foreach ($j in $done) {

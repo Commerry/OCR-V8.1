@@ -77,22 +77,52 @@ if (-not (Get-Command ssh.exe -ErrorAction SilentlyContinue)) {
 }
 
 # ---- 2. ssh key ----
-$keyPath = Join-Path $env:USERPROFILE '.ssh\id_ed25519'
-if (-not (Test-Path "$keyPath.pub")) {
-    Write-Host '[1/4] สร้าง ssh key ใหม่' -ForegroundColor Cyan
-    $sshDir = Split-Path -Parent $keyPath
-    if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
-    & ssh-keygen -t ed25519 -N '""' -f $keyPath -C "ocr-fleet-$env:USERNAME" | Out-Null
-} else {
-    Write-Host '[1/4] มี ssh key อยู่แล้ว' -ForegroundColor Cyan
+# This tool keeps its own key pair. Sharing the user's personal key made a
+# broken or unreadable id_ed25519.pub stop the whole run, and there is no
+# reason to touch their existing keys at all.
+$keyPath = Join-Path $env:USERPROFILE '.ssh\ocr_fleet_ed25519'
+$sshDir = Split-Path -Parent $keyPath
+if (-not (Test-Path $sshDir)) { New-Item -ItemType Directory -Path $sshDir -Force | Out-Null }
+
+function Read-PublicKey($path) {
+    if (-not (Test-Path $path)) { return $null }
+    try {
+        $bytes = [IO.File]::ReadAllBytes($path)
+        if ($bytes.Length -eq 0) { return $null }
+        # a .pub written by a redirect can end up UTF-16; decode accordingly
+        $text = if ($bytes.Length -gt 1 -and $bytes[0] -eq 0xFF -and $bytes[1] -eq 0xFE) {
+            [Text.Encoding]::Unicode.GetString($bytes)
+        } else {
+            [Text.Encoding]::UTF8.GetString($bytes)
+        }
+        foreach ($line in ($text -split "[`r`n]+")) {
+            $clean = ($line -replace '[^ -~]', '').Trim()
+            if ($clean -match '^(ssh-|ecdsa-|sk-)') { return $clean }
+        }
+    } catch { return $null }
+    return $null
 }
 
-$pub = ((Get-Content "$keyPath.pub" -TotalCount 1) -join '').Trim()
-$pub = ($pub -replace '[^\x20-\x7E]', '')
-if ($pub -notmatch '^ssh-') {
-    Write-Host "อ่าน public key ไม่ได้จาก $keyPath.pub" -ForegroundColor Red
+$pub = Read-PublicKey "$keyPath.pub"
+if (-not $pub) {
+    if (Test-Path "$keyPath.pub") {
+        Write-Host '[1/4] key เดิมของเครื่องมือใช้ไม่ได้ - สร้างใหม่' -ForegroundColor Yellow
+        Remove-Item "$keyPath", "$keyPath.pub" -Force -ErrorAction SilentlyContinue
+    } else {
+        Write-Host '[1/4] สร้าง ssh key สำหรับงานนี้' -ForegroundColor Cyan
+    }
+    # through cmd: PowerShell 5.1 drops an empty-string argument, so -N "" has
+    # to survive as a real pair of quotes for ssh-keygen to see "no passphrase"
+    & cmd /c "ssh-keygen -t ed25519 -f `"$keyPath`" -N `"`" -C ocr-fleet-$env:USERNAME" | Out-Null
+    $pub = Read-PublicKey "$keyPath.pub"
+}
+
+if (-not $pub) {
+    Write-Host "สร้าง ssh key ไม่สำเร็จที่ $keyPath" -ForegroundColor Red
+    Write-Host 'ลองรันมือ:  ssh-keygen -t ed25519 -f "$env:USERPROFILE\.ssh\ocr_fleet_ed25519" -N ""' -ForegroundColor Yellow
     exit 1
 }
+Write-Host "[1/4] ใช้ key: $keyPath" -ForegroundColor Cyan
 
 # ---- 3. หาว่ากล้องตัวไหนยังเข้าด้วย key ไม่ได้ ----
 Write-Host '[2/4] ตรวจว่ากล้องตัวไหนเข้าได้แล้วบ้าง' -ForegroundColor Cyan
@@ -102,7 +132,7 @@ $dead = @()
 
 foreach ($h in $Cameras) {
     $null = & ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL `
-        -o ConnectTimeout=6 "$User@$h" 'echo ok' 2>&1
+        -o ConnectTimeout=6 -i $keyPath "$User@$h" 'echo ok' 2>&1
     if ($LASTEXITCODE -eq 0) {
         $reachable += $h
         Write-Host "   $h  เข้าได้ด้วย key แล้ว" -ForegroundColor Green
@@ -151,9 +181,10 @@ Write-Host "[4/4] $what $($reachable.Count) ตัว (ครั้งละ $Jo
 Write-Host ''
 
 $opts = @{
-    Hosts = $reachable
-    User  = $User
-    Jobs  = $Jobs
+    Hosts        = $reachable
+    User         = $User
+    Jobs         = $Jobs
+    IdentityFile = $keyPath
 }
 if ($ReportOnly) {
     $opts['Report'] = $true
