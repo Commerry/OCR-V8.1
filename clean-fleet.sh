@@ -125,7 +125,7 @@ done
 # this is the one that makes "I deleted the logs but nothing came back"
 HELD=$(sudo -n lsof -nP +L1 2>/dev/null | awk '$0 !~ /^COMMAND/ {s+=$8} END {print s+0}')
 [ "${HELD:-0}" -gt 10000000 ] 2>/dev/null && \
-  echo "   $(human "$HELD")  ไฟล์ที่ลบแล้วแต่โปรเซสยังถือไว้ - ต้อง restart ถึงจะคืนพื้นที่ (ใช้ --restart)"
+  echo "   $(human "$HELD")  ไฟล์ที่ลบแล้วแต่โปรเซสยังถือไว้ - สคริปต์จะสั่ง pm2 reloadLogs ให้ปล่อยคืน"
 
 if [ "$MODE" = "report" ]; then
   echo "(โหมดดูอย่างเดียว ไม่มีการลบ)"
@@ -151,6 +151,18 @@ if [ "$PM2_KB" -gt 1024 ]; then
   # truncate rather than delete: a running process keeps writing to the same
   # file handle, so deleting it would not give the space back until a restart
   do_rm "find '$APP_DIR/logs' '$HOME/.pm2/logs' -name '*.log*' -exec truncate -s 0 {} +"
+fi
+
+# A log file deleted by hand earlier is still held open by the pm2 daemon, and
+# its space only comes back when the daemon reopens its files. Restarting the
+# app does not do it - the daemon owns the handle, not the app. reloadLogs
+# does, with no downtime.
+if command -v pm2 >/dev/null 2>&1; then
+  HELD_PM2=$(sudo -n lsof -nP +L1 2>/dev/null | awk '/PM2|pm2/ {s+=$8} END {print s+0}')
+  if [ "${HELD_PM2:-0}" -gt 10000000 ] 2>/dev/null; then
+    say "ปล่อยไฟล์ log ที่ pm2 ยังถือไว้ $(human "$HELD_PM2") (pm2 reloadLogs)"
+  fi
+  do_rm "pm2 reloadLogs"
 fi
 
 if command -v pm2 >/dev/null 2>&1; then
@@ -219,9 +231,11 @@ fi
 
 # 7. restart to hand back space still held by deleted files
 if [ "$DO_RESTART" = "1" ] && [ "$DRY" != "1" ] && command -v pm2 >/dev/null 2>&1; then
-  echo "   [restart] pm2 restart $PM2_NAME"
-  pm2 restart "$PM2_NAME" >/dev/null 2>&1
-  sleep 2
+  # pm2 update restarts the daemon as well as the apps: that is what releases
+  # space still held by files the daemon opened before they were deleted
+  echo "   [restart] pm2 update (daemon + $PM2_NAME)"
+  pm2 update >/dev/null 2>&1 || pm2 restart "$PM2_NAME" >/dev/null 2>&1
+  sleep 3
 fi
 
 AFTER=$(free_kb)
