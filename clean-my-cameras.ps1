@@ -124,6 +124,39 @@ if (-not $pub) {
 }
 Write-Host "[1/4] ใช้ key: $keyPath" -ForegroundColor Cyan
 
+# ---- ตัวช่วยป้อนรหัสให้ ssh อัตโนมัติ ----
+# Windows ssh ไม่รับรหัสผ่านทาง command line และไม่มี sshpass
+# แต่ OpenSSH 8.4+ มี SSH_ASKPASS_REQUIRE=force ซึ่งบังคับให้ไปถามรหัสจาก
+# โปรแกรมภายนอกแทนการพิมพ์ที่หน้าจอ - เลยคอมไพล์โปรแกรมเล็ก ๆ ที่พ่นรหัสออกมา
+# (ใช้ csc ที่มากับ .NET Framework ไม่ต้องโหลดอะไรเพิ่ม)
+function New-AskPassExe($pass) {
+    $exe = Join-Path $env:TEMP 'ocr-askpass.exe'
+    $src = @"
+using System;
+class A { static int Main(string[] args) { Console.WriteLine("$($pass -replace '"','\"')"); return 0; } }
+"@
+    try {
+        if (Test-Path $exe) { Remove-Item $exe -Force -ErrorAction Stop }
+        Add-Type -TypeDefinition $src -OutputAssembly $exe -OutputType ConsoleApplication -ErrorAction Stop
+        if (Test-Path $exe) { return $exe }
+    } catch {
+        Write-Host "   (สร้างตัวช่วยป้อนรหัสไม่ได้: $($_.Exception.Message))" -ForegroundColor DarkYellow
+    }
+    return $null
+}
+
+$askPass = New-AskPassExe $Password
+
+# PuTTY's plink takes the password directly; if it happens to be installed it
+# is the surest way to avoid typing anything
+$plinkExe = (Get-Command plink.exe -ErrorAction SilentlyContinue).Source
+if (-not $plinkExe) {
+    foreach ($c in @("$env:ProgramFiles\PuTTY\plink.exe", "${env:ProgramFiles(x86)}\PuTTY\plink.exe")) {
+        if (Test-Path $c) { $plinkExe = $c; break }
+    }
+}
+$autoPass = [bool]$askPass -or [bool]$plinkExe
+
 # ---- 3. หาว่ากล้องตัวไหนยังเข้าด้วย key ไม่ได้ ----
 Write-Host '[2/4] ตรวจว่ากล้องตัวไหนเข้าได้แล้วบ้าง' -ForegroundColor Cyan
 $needKey = @()
@@ -152,13 +185,58 @@ foreach ($h in $Cameras) {
 # ---- 4. ติดตั้ง key ให้ตัวที่ยังไม่มี ----
 if ($needKey.Count -gt 0) {
     Write-Host ''
-    Write-Host "[3/4] ติดตั้ง key $($needKey.Count) ตัว - ใส่รหัส '$Password' ตัวละครั้ง" -ForegroundColor Cyan
+    $how = if ($plinkExe) { 'ป้อนรหัสอัตโนมัติผ่าน plink' }
+           elseif ($askPass) { 'ป้อนรหัสให้อัตโนมัติ' }
+           else { "ต้องพิมพ์รหัส '$Password' ตัวละครั้ง" }
+    Write-Host "[3/4] ติดตั้ง key $($needKey.Count) ตัว - $how" -ForegroundColor Cyan
     $cmd = "mkdir -p ~/.ssh; chmod 700 ~/.ssh; echo '$pub' >> ~/.ssh/authorized_keys; sort -u -o ~/.ssh/authorized_keys ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; echo KEY_OK"
+    $sshOpts = @('-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL',
+                 '-o', 'ConnectTimeout=10', '-o', 'NumberOfPasswordPrompts=1',
+                 '-o', 'PubkeyAuthentication=no', '-o', 'PreferredAuthentications=password,keyboard-interactive')
+
     foreach ($h in $needKey) {
         Write-Host "   -> $h" -ForegroundColor Cyan
-        & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 "$User@$h" $cmd
-        if ($LASTEXITCODE -eq 0) {
+        $installed = $false
+
+        if ($plinkExe) {
+            # -batch so it never stops on a host-key question
+            $out = & $plinkExe -ssh -batch -pw $Password "$User@$h" $cmd 2>&1 | Out-String
+            if ($out -match 'KEY_OK') { $installed = $true }
+            elseif ($out -match 'host key is not cached|store key in cache') {
+                # accept the key once, then retry
+                'y' | & $plinkExe -ssh -pw $Password "$User@$h" 'echo cached' 2>&1 | Out-Null
+                $out = & $plinkExe -ssh -batch -pw $Password "$User@$h" $cmd 2>&1 | Out-String
+                if ($out -match 'KEY_OK') { $installed = $true }
+            }
+        }
+
+        if (-not $installed -and $askPass) {
+            $env:SSH_ASKPASS = $askPass
+            $env:SSH_ASKPASS_REQUIRE = 'force'
+            $env:DISPLAY = 'localhost:0'
+            $out = & ssh @sshOpts "$User@$h" $cmd 2>&1 | Out-String
+            Remove-Item Env:SSH_ASKPASS, Env:SSH_ASKPASS_REQUIRE, Env:DISPLAY -ErrorAction SilentlyContinue
+            if ($out -match 'KEY_OK') {
+                $installed = $true
+            } elseif ($h -eq $needKey[0]) {
+                # the first camera decides whether this machine can do it at all
+                Write-Host '      ป้อนรหัสอัตโนมัติไม่ได้บนเครื่องนี้ - จะขอให้พิมพ์เอง' -ForegroundColor DarkYellow
+                if (-not $plinkExe) {
+                    Write-Host '      (ทางเลือก: winget install PuTTY.PuTTY แล้วรันใหม่ จะไม่ต้องพิมพ์เลย)' -ForegroundColor DarkYellow
+                }
+                $askPass = $null
+            }
+        }
+
+        if (-not $installed) {
+            # last resort: let ssh ask on screen
+            & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 "$User@$h" $cmd
+            if ($LASTEXITCODE -eq 0) { $installed = $true }
+        }
+
+        if ($installed) {
             $reachable += $h
+            Write-Host "      ติดตั้ง key แล้ว" -ForegroundColor Green
         } else {
             Write-Host "      ไม่สำเร็จ - ข้ามตัวนี้ไปก่อน" -ForegroundColor Red
             $dead += $h
@@ -200,6 +278,8 @@ if ($dead.Count -gt 0) {
     Write-Host ''
     Write-Host "กล้องที่ทำไม่ได้ $($dead.Count) ตัว: $($dead -join ', ')" -ForegroundColor Yellow
 }
+if ($askPass) { Remove-Item $askPass -Force -ErrorAction SilentlyContinue }
+
 Write-Host ''
 if (-not $ReportOnly) {
     Write-Host 'เสร็จแล้ว - กล้องที่เคลียร์ไปจะมี pm2-logrotate คุมขนาด log ไว้ ไม่กลับมาเต็มอีก' -ForegroundColor Green
