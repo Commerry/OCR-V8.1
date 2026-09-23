@@ -226,3 +226,31 @@ bash clean-fleet.sh -p raspberry 10.1.100.61 10.1.100.62 10.1.100.63
 **สิ่งที่ไม่ถูกแตะ:** ไฟล์โปรแกรม, `config.json`, บัญชีผู้ใช้, และรูปที่เซฟไว้ (เว้นแต่สั่ง `--images-days`)
 
 > ถ้ารายงานขึ้นบรรทัด "ไฟล์ที่ลบแล้วแต่โปรเซสยังถือไว้" แปลว่าเคยลบ log ไปแล้วแต่พื้นที่ไม่คืน เพราะโปรเซสยังเปิดไฟล์นั้นค้าง ให้สั่งซ้ำพร้อม `--restart`
+
+### เครื่อง Windows ที่ไม่มี bash / WSL พัง
+
+ใช้ `clean-fleet.ps1` แทน ทำงานเหมือนกันทุกอย่าง อาศัย `ssh.exe` ที่ Windows 10/11 มีมาให้อยู่แล้ว
+
+Windows ssh ใส่รหัสผ่านในคำสั่งไม่ได้ จึงต้องติดตั้ง ssh key ครั้งเดียวก่อน (พิมพ์รหัสกล้องละครั้ง) หลังจากนั้นไม่ต้องใส่รหัสอีกเลย:
+
+```powershell
+cd $env:USERPROFILE\cam-tools
+.\clean-fleet.ps1 -SetupKeys -Hosts 10.41.182.15,10.41.182.17,10.31.182.17
+.\clean-fleet.ps1 -Report   -Hosts 10.41.182.15,10.41.182.17,10.31.182.17
+.\clean-fleet.ps1 -SudoPass raspberry -Hosts 10.41.182.15,10.41.182.17,10.31.182.17
+```
+
+กล้องเยอะให้ใส่ไว้ในไฟล์ (บรรทัดละ IP) แล้วใช้ `-HostFile cameras.txt`
+
+| พารามิเตอร์ | ความหมาย |
+|---|---|
+| `-SetupKeys` | ติดตั้ง ssh key (ทำครั้งเดียวต่อกล้อง) |
+| `-Report` / `-DryRun` | ดูอย่างเดียว / บอกว่าจะลบอะไร |
+| `-SudoPass raspberry` | รหัสสำหรับ sudo เพื่อเคลียร์ journal และ apt cache |
+| `-ImagesDays 30` | ลบรูปเก่ากว่า 30 วัน |
+| `-Restart` | `pm2 update` หลังเคลียร์ |
+| `-Jobs 6` | ทำพร้อมกันกี่ตัว |
+| `-Plink C:\path\plink.exe` | ใช้ PuTTY plink แทน ถ้าอยากใส่รหัสผ่านแทนการทำ key |
+
+ถ้ายังไม่มีสคริปต์บนเครื่อง Windows: ติดตั้ง Git for Windows แล้ว
+`git clone https://github.com/Commerry/OCR-V8.1.git $env:USERPROFILE\cam-tools`
