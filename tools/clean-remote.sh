@@ -27,6 +27,19 @@ human() { numfmt --to=iec --suffix=B "${1:-0}" 2>/dev/null || echo "${1:-0}B"; }
 free_kb() { df -Pk / | awk 'NR==2 {print $4}'; }
 size_kb() { du -sk "$@" 2>/dev/null | awk '{s+=$1} END {print s+0}'; }
 SUDO() { if [ -n "$SUDO_PASS" ]; then echo "$SUDO_PASS" | sudo -S "$@" 2>/dev/null; else sudo -n "$@" 2>/dev/null; fi; }
+# Scanning a whole SD card takes minutes on slow storage. Every survey step
+# runs under a time limit so a slow camera reports what it managed to find
+# instead of holding up the whole fleet.
+if command -v timeout >/dev/null 2>&1; then
+  TMO() { local t="$1"; shift; timeout "$t" "$@"; }
+else
+  TMO() { shift; "$@"; }
+fi
+SUDO_TMO() { # SUDO_TMO <seconds> <command...>
+  local t="$1"; shift
+  if [ -n "$SUDO_PASS" ]; then echo "$SUDO_PASS" | TMO "$t" sudo -S "$@" 2>/dev/null
+  else TMO "$t" sudo -n "$@" 2>/dev/null; fi
+}
 
 BEFORE=$(free_kb)
 echo "ดิสก์: $(df -Ph / | awk 'NR==2 {print "ใช้ "$3" / "$2" ("$5")  เหลือ "$4}')"
@@ -37,29 +50,33 @@ echo "ดิสก์: $(df -Ph / | awk 'NR==2 {print "ใช้ "$3" / "$2" ("$
 echo "-- โฟลเดอร์ที่ใหญ่ที่สุดในเครื่อง --"
 # with sudo it sees the whole card; without, the home folder, logs and /tmp
 # still cover everything this program can be blamed for
-DIRS=$(SUDO du -x -d 3 --exclude=/proc --exclude=/sys / 2>/dev/null | sort -rn | awk '$1 > 51200' | head -14)
-[ -z "$DIRS" ] && DIRS=$(du -x -d 3 "$HOME" /var/log /tmp 2>/dev/null | sort -rn | awk '$1 > 51200' | head -14)
+DIRS=$(SUDO_TMO 75 du -x -d 2 --exclude=/proc --exclude=/sys / | sort -rn | awk '$1 > 51200' | head -12)
+[ -z "$DIRS" ] && DIRS=$(TMO 60 du -x -d 2 "$HOME" /var/log /var/cache /tmp 2>/dev/null | sort -rn | awk '$1 > 51200' | head -12)
 if [ -n "$DIRS" ]; then
   echo "$DIRS" | while read -r kb path; do printf '   %9s  %s\n' "$(human $((kb * 1024)))" "$path"; done
 else
-  echo "   (อ่านไม่ได้ - ต้องใช้ sudo)"
+  echo "   (สแกนไม่ทันในเวลาที่กำหนด)"
 fi
 
-echo "-- ไฟล์เดี่ยวที่ใหญ่กว่า 100MB --"
-BIG=$(SUDO find / -xdev -type f -size +100M -printf '%s %p\n' 2>/dev/null | sort -rn | head -10)
-[ -z "$BIG" ] && BIG=$(find "$HOME" /var/log /tmp -xdev -type f -size +100M -printf '%s %p\n' 2>/dev/null | sort -rn | head -10)
-if [ -n "$BIG" ]; then
-  echo "$BIG" | while read -r b path; do printf '   %9s  %s\n' "$(human "$b")" "$path"; done
-else
-  echo "   (ไม่มี)"
+# The whole-card file hunt is the slowest step of all: worth it when you are
+# looking for what to do, pointless when the job is to clean.
+if [ "$MODE" = "report" ]; then
+  echo "-- ไฟล์เดี่ยวที่ใหญ่กว่า 100MB --"
+  BIG=$(SUDO_TMO 90 find / -xdev -type f -size +100M -printf '%s %p\n' | sort -rn | head -10)
+  [ -z "$BIG" ] && BIG=$(TMO 60 find "$HOME" /var/log /tmp -xdev -type f -size +100M -printf '%s %p\n' 2>/dev/null | sort -rn | head -10)
+  if [ -n "$BIG" ]; then
+    echo "$BIG" | while read -r b path; do printf '   %9s  %s\n' "$(human "$b")" "$path"; done
+  else
+    echo "   (ไม่มี)"
+  fi
 fi
 
 # Space that df counts but ls cannot show you: files deleted while a process
 # still had them open. This is what makes "I cleaned it and nothing changed".
-HELD=$(SUDO lsof -nP +L1 2>/dev/null | awk '$0 !~ /^COMMAND/ && $8 ~ /^[0-9]+$/ {s+=$8} END {print s+0}')
+HELD=$(SUDO_TMO 30 lsof -nP +L1 | awk '$0 !~ /^COMMAND/ && $8 ~ /^[0-9]+$/ {s+=$8} END {print s+0}')
 if [ "${HELD:-0}" -gt 10000000 ] 2>/dev/null; then
   echo "-- ไฟล์ที่ลบแล้วแต่โปรเซสยังถือไว้ $(human "$HELD") --"
-  SUDO lsof -nP +L1 2>/dev/null | awk '$8 ~ /^[0-9]+$/ && $8 > 10000000 {printf "   %s (pid %s) %s\n", $1, $2, $9}' | head -6
+  SUDO_TMO 30 lsof -nP +L1 | awk '$8 ~ /^[0-9]+$/ && $8 > 10000000 {printf "   %s (pid %s) %s\n", $1, $2, $9}' | head -6
 fi
 
 if [ "$MODE" = "report" ]; then
@@ -127,7 +144,7 @@ maybe 10240 "/var/tmp" "$(size_kb /var/tmp)" "find /var/tmp -mindepth 1 -mtime +
 if [ -n "$SUDO_PASS" ] || sudo -n true 2>/dev/null; then
   KB=$(size_kb /var/cache/apt/archives); if [ "$KB" -gt 1024 ]; then
     say "แพ็กเกจ .deb ที่ดาวน์โหลดค้างไว้ $(human $((KB * 1024)))"
-    do_rm "SUDO apt-get clean"
+    do_rm "SUDO_TMO 60 apt-get clean"
   fi
   KB=$(size_kb /var/lib/apt/lists); if [ "$KB" -gt 20480 ]; then
     say "รายการแพ็กเกจ apt $(human $((KB * 1024))) (สร้างใหม่เองตอน apt update)"
@@ -135,7 +152,7 @@ if [ -n "$SUDO_PASS" ] || sudo -n true 2>/dev/null; then
   fi
   KB=$(size_kb /var/log/journal); if [ "$KB" -gt 51200 ]; then
     say "systemd journal $(human $((KB * 1024))) -> เหลือ 50MB"
-    do_rm "SUDO journalctl --vacuum-size=50M"
+    do_rm "SUDO_TMO 90 journalctl --vacuum-size=50M"
   fi
   KB=$(size_kb /var/log); if [ "$KB" -gt 51200 ]; then
     say "log เก่าที่หมุนแล้วใน /var/log"
@@ -148,10 +165,10 @@ if [ -n "$SUDO_PASS" ] || sudo -n true 2>/dev/null; then
   KB=$(size_kb /root/.cache); [ "$KB" -gt 1024 ] && { say "cache ของ root $(human $((KB * 1024)))"; do_rm "SUDO rm -rf /root/.cache/* /root/.npm/_cacache"; }
   # packages left behind by upgrades
   if command -v apt-get >/dev/null 2>&1; then
-    AUTO=$(SUDO apt-get -s autoremove 2>/dev/null | grep -c '^Remv')
+    AUTO=$(SUDO_TMO 40 apt-get -s autoremove | grep -c '^Remv')
     if [ "${AUTO:-0}" -gt 0 ]; then
       say "แพ็กเกจที่ไม่มีอะไรใช้แล้ว $AUTO รายการ"
-      do_rm "SUDO apt-get -y autoremove --purge"
+      do_rm "SUDO_TMO 180 apt-get -y autoremove --purge"
     fi
   fi
 else
@@ -171,10 +188,10 @@ fi
 
 # 7. hand back space still held by deleted files
 if [ "$DRY" != "1" ]; then
-  STILL=$(SUDO lsof -nP +L1 2>/dev/null | awk '$0 !~ /^COMMAND/ && $8 ~ /^[0-9]+$/ {s+=$8} END {print s+0}')
+  STILL=$(SUDO_TMO 30 lsof -nP +L1 | awk '$0 !~ /^COMMAND/ && $8 ~ /^[0-9]+$/ {s+=$8} END {print s+0}')
   if [ "${STILL:-0}" -gt 100000000 ] 2>/dev/null && [ "$DO_RESTART" != "1" ]; then
     echo "   เหลือ $(human "$STILL") ที่ยังถูกโปรเซสถือไว้ - สั่งซ้ำพร้อม --restart / -Restart เพื่อคืนส่วนนี้"
-    SUDO lsof -nP +L1 2>/dev/null | awk '$8 ~ /^[0-9]+$/ && $8 > 50000000 {printf "      %s (pid %s) %s\n", $1, $2, $9}' | head -4
+    SUDO_TMO 30 lsof -nP +L1 | awk '$8 ~ /^[0-9]+$/ && $8 > 50000000 {printf "      %s (pid %s) %s\n", $1, $2, $9}' | head -4
   fi
 fi
 

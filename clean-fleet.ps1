@@ -32,6 +32,7 @@ param(
     [string]   $AppDir = '~/Desktop/OCR-V8.1',
     [string]   $Pm2Name = 'ocr',
     [int]      $Jobs = 4,
+    [int]      $HostTimeoutSec = 420,
     [int]      $ImagesDays = 0,
     [switch]   $Report,
     [switch]   $DryRun,
@@ -143,32 +144,58 @@ $script = {
 
 $queue = [System.Collections.Queue]::new(@($Hosts))
 $running = @()
-$results = @()
+$ok = 0
+$failed = 0
+$finished = 0
+$total = $Hosts.Count
+
+# Results are printed the moment a camera finishes, not at the very end: a
+# fleet of sixteen used to look frozen for minutes with nothing on screen.
+$show = {
+    param($r, $n, $total)
+    $status = if ($r.Ok) { 'OK' } else { 'FAIL' }
+    $color = if ($r.Ok) { 'Green' } else { 'Red' }
+    Write-Host "===== [$n/$total] $($r.Host) [$status] =====" -ForegroundColor $color
+    ($r.Output -split "`n") | ForEach-Object { Write-Host "  $_" }
+    Write-Host ''
+}
 
 while ($queue.Count -gt 0 -or $running.Count -gt 0) {
     while ($queue.Count -gt 0 -and $running.Count -lt $Jobs) {
         $h = $queue.Dequeue()
-        $running += Start-Job -ScriptBlock $script -ArgumentList $h, $User, $remote, $envPrefix, $Plink, $Password, $IdentityFile
+        $job = Start-Job -ScriptBlock $script -ArgumentList $h, $User, $remote, $envPrefix, $Plink, $Password, $IdentityFile
+        $running += [pscustomobject]@{ Job = $job; Host = $h; Started = Get-Date }
     }
-    $done = $running | Where-Object { $_.State -ne 'Running' }
-    foreach ($j in $done) {
-        $results += Receive-Job $j -ErrorAction SilentlyContinue
-        Remove-Job $j -Force
+
+    foreach ($entry in @($running)) {
+        $j = $entry.Job
+        # a camera that never answers must not hold up the rest
+        if ($j.State -eq 'Running' -and ((Get-Date) - $entry.Started).TotalSeconds -gt $HostTimeoutSec) {
+            Stop-Job $j -ErrorAction SilentlyContinue
+            $finished++; $failed++
+            & $show ([pscustomobject]@{ Host = $entry.Host; Ok = $false; Output = "ไม่ตอบใน $HostTimeoutSec วินาที - ข้ามไปก่อน" }) $finished $total
+            Remove-Job $j -Force -ErrorAction SilentlyContinue
+            $running = @($running | Where-Object { $_.Job.Id -ne $j.Id })
+            continue
+        }
+        if ($j.State -ne 'Running') {
+            $r = Receive-Job $j -ErrorAction SilentlyContinue
+            Remove-Job $j -Force -ErrorAction SilentlyContinue
+            $running = @($running | Where-Object { $_.Job.Id -ne $j.Id })
+            $finished++
+            if ($r) {
+                if ($r.Ok) { $ok++ } else { $failed++ }
+                & $show $r $finished $total
+            } else {
+                $failed++
+                & $show ([pscustomobject]@{ Host = $entry.Host; Ok = $false; Output = 'ไม่มีผลลัพธ์กลับมา' }) $finished $total
+            }
+        }
     }
-    $running = @($running | Where-Object { $_.State -eq 'Running' })
     Start-Sleep -Milliseconds 400
 }
 
-$ok = 0
-foreach ($r in $results) {
-    $status = if ($r.Ok) { 'OK' } else { 'FAIL' }
-    $color = if ($r.Ok) { 'Green' } else { 'Red' }
-    Write-Host "===== $($r.Host) [$status] =====" -ForegroundColor $color
-    ($r.Output -split "`n") | ForEach-Object { Write-Host "  $_" }
-    Write-Host ''
-    if ($r.Ok) { $ok++ }
-}
-Write-Host "done: $ok ok, $($results.Count - $ok) failed (from $($Hosts.Count) cameras)"
-if ($ok -lt $results.Count) {
+Write-Host "done: $ok ok, $failed failed (from $total cameras)"
+if ($failed -gt 0) {
     Write-Host 'กล้องที่ FAIL เพราะยังไม่มี ssh key: รันครั้งเดียวด้วย -SetupKeys' -ForegroundColor Yellow
 }
