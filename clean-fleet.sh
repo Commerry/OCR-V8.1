@@ -127,12 +127,10 @@ for host in "${HOSTS[@]}"; do
 done
 wait
 
+# each camera already printed itself as it finished; just tally the result
 ok=0; fail=0
 for host in "${HOSTS[@]}"; do
     status=$(cat "$TMP_DIR/$host.status" 2>/dev/null || echo FAIL)
-    echo "===== $host [$status] ====="
-    sed 's/^/  /' "$TMP_DIR/$host.log" 2>/dev/null
-    echo
     if [ "$status" = OK ]; then ok=$((ok + 1)); else fail=$((fail + 1)); fi
 done
 
