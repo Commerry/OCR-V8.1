@@ -62,11 +62,23 @@ if ($SetupKeys) {
         Write-Host "สร้าง ssh key ใหม่ที่ $keyPath" -ForegroundColor Cyan
         & ssh-keygen -t ed25519 -N '""' -f $keyPath | Out-Null
     }
-    $pub = (Get-Content "$keyPath.pub" -Raw).Trim()
+    # first line only, printable characters only: anything else in the argument
+    # makes Windows refuse to start ssh with "filename or extension is too long"
+    $pub = ((Get-Content "$keyPath.pub" -TotalCount 1) -join '').Trim()
+    $pub = ($pub -replace '[^ -~]', '')
+    if ($pub -notmatch '^ssh-') {
+        Write-Host "อ่าน public key ไม่ได้จาก $keyPath.pub" -ForegroundColor Red
+        exit 1
+    }
+    # the key appears once in the command, and duplicates are removed on the
+    # camera instead, to keep this command line short
+    $cmd = "mkdir -p ~/.ssh; chmod 700 ~/.ssh; echo '$pub' >> ~/.ssh/authorized_keys; sort -u -o ~/.ssh/authorized_keys ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; echo KEY_OK"
     foreach ($h in $Hosts) {
         Write-Host "ติดตั้ง key บน $h (ใส่รหัส $User ครั้งเดียว)" -ForegroundColor Cyan
-        $cmd = "mkdir -p ~/.ssh && chmod 700 ~/.ssh && grep -qxF '$pub' ~/.ssh/authorized_keys 2>/dev/null || echo '$pub' >> ~/.ssh/authorized_keys; chmod 600 ~/.ssh/authorized_keys; echo KEY_OK"
-        & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL "$User@$h" $cmd
+        & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 "$User@$h" $cmd
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "  ไม่สำเร็จ - ทำมือได้ด้วย:  type `$env:USERPROFILE\.ssh\id_ed25519.pub | ssh $User@$h `"cat >> ~/.ssh/authorized_keys`"" -ForegroundColor Yellow
+        }
     }
     Write-Host 'เสร็จ - คราวหน้าไม่ต้องใส่รหัส ssh อีก' -ForegroundColor Green
     if (-not $Report -and -not $DryRun -and $mode -eq 'clean' -and -not $PSBoundParameters.ContainsKey('SudoPass')) { exit 0 }
