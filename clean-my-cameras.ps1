@@ -35,6 +35,9 @@ param(
 
 $ErrorActionPreference = 'Continue'
 
+# the cameras answer in Thai (UTF-8); without this the console prints ?????
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+
 # กล้องทั้งหมด - แก้ตรงนี้เวลาเพิ่ม/ลดกล้อง
 $Cameras = @(
     '10.41.182.15'

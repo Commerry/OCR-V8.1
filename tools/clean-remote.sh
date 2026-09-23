@@ -41,6 +41,7 @@ SUDO_TMO() { # SUDO_TMO <seconds> <command...>
   else TMO "$t" sudo -n "$@" 2>/dev/null; fi
 }
 
+echo "===OCR-CLEAN-BEGIN==="
 BEFORE=$(free_kb)
 echo "ดิสก์: $(df -Ph / | awk 'NR==2 {print "ใช้ "$3" / "$2" ("$5")  เหลือ "$4}')"
 

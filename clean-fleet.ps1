@@ -45,6 +45,9 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# the cameras answer in Thai (UTF-8); without this the console prints ?????
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
+
 if ($HostFile) {
     $Hosts += Get-Content $HostFile | ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ }
 }
@@ -99,7 +102,9 @@ if (-not (Test-Path $remoteFile)) {
     exit 1
 }
 # LF endings: bash chokes on a script full of CR characters
-$remote = ([IO.File]::ReadAllText($remoteFile)) -replace "`r`n", "`n"
+# every CR has to go: git checks these out with Windows line endings, and bash
+# reading them over stdin then fails with "$'': command not found"
+$remote = ([IO.File]::ReadAllText($remoteFile)) -replace "`r", ""
 
 $envPrefix = "APP_DIR='$AppDir' PM2_NAME='$Pm2Name' MODE='$mode' IMAGES_DAYS='$ImagesDays' DO_RESTART='$(if ($Restart) {1} else {0})' SUDO_PASS='$SudoPass'"
 
@@ -122,7 +127,8 @@ $script = {
                 $out = $body | & $plink -ssh -batch -pw $password "$user@$h" "$envPrefix bash -s" 2>&1
             } else {
                 $sshArgs = @('-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL',
-                             '-o', 'ConnectTimeout=10', '-o', 'BatchMode=yes')
+                             '-o', 'ConnectTimeout=10', '-o', 'BatchMode=yes',
+                             '-o', 'LogLevel=ERROR')
                 if ($identity) { $sshArgs += @('-i', $identity) }
                 $sshArgs += @("$user@$h", "$envPrefix bash -s")
                 $out = $body | & ssh @sshArgs 2>&1
@@ -132,10 +138,15 @@ $script = {
             $out = $_.Exception.Message
             $code = 1
         }
+        # drop the login banner the camera prints before our own output
+        $text = ($out | ForEach-Object { "$_" }) -join "`n"
+        $marker = '===OCR-CLEAN-BEGIN==='
+        $i = $text.IndexOf($marker)
+        if ($i -ge 0) { $text = $text.Substring($i + $marker.Length).TrimStart("`n") }
         [pscustomobject]@{
             Host   = $h
             Ok     = ($code -eq 0)
-            Output = (($out | ForEach-Object { "$_" }) -join "`n")
+            Output = $text
         }
     } finally {
         Remove-Item $tmp -Force -ErrorAction SilentlyContinue

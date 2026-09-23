@@ -106,14 +106,30 @@ echo
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
+HOST_TIMEOUT="${HOST_TIMEOUT:-420}"
+
 run_one() {
     local host="$1"
     local env_prefix="APP_DIR='$APP_DIR' PM2_NAME='$PM2_NAME' MODE='$MODE' IMAGES_DAYS='$IMAGES_DAYS' DO_RESTART='$DO_RESTART' SUDO_PASS='$SUDO_PASS'"
-    if echo "$REMOTE_BODY" | $SSH_CMD $SSH_OPTS "$SSH_USER@$host" "$env_prefix bash -s" >"$TMP_DIR/$host.log" 2>&1; then
+    # a camera that stops answering must not hold up the rest of the fleet
+    local runner="$SSH_CMD"
+    command -v timeout >/dev/null 2>&1 && runner="timeout $HOST_TIMEOUT $SSH_CMD"
+    if echo "$REMOTE_BODY" | $runner $SSH_OPTS "$SSH_USER@$host" "$env_prefix bash -s" >"$TMP_DIR/$host.log" 2>&1; then
         echo OK > "$TMP_DIR/$host.status"
     else
         echo FAIL > "$TMP_DIR/$host.status"
     fi
+    # print this camera as soon as it is done, skipping its login banner
+    {
+        flock 9
+        echo "===== $host [$(cat "$TMP_DIR/$host.status")] ====="
+        if grep -q '===OCR-CLEAN-BEGIN===' "$TMP_DIR/$host.log"; then
+            sed -n '/===OCR-CLEAN-BEGIN===/,$p' "$TMP_DIR/$host.log" | sed '1d;s/^/  /'
+        else
+            sed 's/^/  /' "$TMP_DIR/$host.log"
+        fi
+        echo
+    } 9>"$TMP_DIR/.print.lock"
 }
 
 running=0
