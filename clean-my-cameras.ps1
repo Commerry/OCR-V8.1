@@ -162,6 +162,22 @@ if (-not $plinkExe) {
 }
 $autoPass = [bool]$askPass -or [bool]$plinkExe
 
+# ssh can sit forever when a camera accepts the connection but never gets to a
+# prompt - a full disk does that. ConnectTimeout only covers the TCP part, so
+# every call gets a hard limit of its own.
+function Invoke-SshTimed {
+    param([string[]] $SshArgs, [int] $TimeoutSec = 15)
+    $job = Start-Job -ScriptBlock { param($a) & ssh @a 2>&1 } -ArgumentList (, $SshArgs)
+    if (Wait-Job $job -Timeout $TimeoutSec) {
+        $out = Receive-Job $job -ErrorAction SilentlyContinue
+        Remove-Job $job -Force -ErrorAction SilentlyContinue
+        return @{ TimedOut = $false; Output = @($out | ForEach-Object { "$_" }) }
+    }
+    Stop-Job $job -ErrorAction SilentlyContinue
+    Remove-Job $job -Force -ErrorAction SilentlyContinue
+    return @{ TimedOut = $true; Output = @("ไม่ตอบใน $TimeoutSec วินาที") }
+}
+
 # ---- 3. หาว่ากล้องตัวไหนยังเข้าด้วย key ไม่ได้ ----
 Write-Host '[2/4] ตรวจว่ากล้องตัวไหนเข้าได้แล้วบ้าง' -ForegroundColor Cyan
 $needKey = @()
@@ -169,11 +185,16 @@ $reachable = @()
 $dead = @()
 
 foreach ($h in $Cameras) {
-    $null = & ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL `
-        -o ConnectTimeout=6 -i $keyPath "$User@$h" 'echo ok' 2>&1
-    if ($LASTEXITCODE -eq 0) {
+    $probe = Invoke-SshTimed -TimeoutSec 15 -SshArgs @(
+        '-o', 'BatchMode=yes', '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL',
+        '-o', 'ConnectTimeout=6', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=2',
+        '-o', 'LogLevel=ERROR', '-i', $keyPath, "$User@$h", 'echo ok')
+    if (-not $probe.TimedOut -and ($probe.Output -join ' ') -match 'ok') {
         $reachable += $h
         Write-Host "   $h  เข้าได้ด้วย key แล้ว" -ForegroundColor Green
+    } elseif ($probe.TimedOut) {
+        $dead += $h
+        Write-Host "   $h  ค้าง ไม่ตอบใน 15 วินาที (เครื่องอาจดิสก์เต็มหรือโหลดสูง)" -ForegroundColor Red
     } else {
         # แยกระหว่าง "ยังไม่มี key" กับ "ติดต่อเครื่องไม่ได้เลย"
         $ping = Test-Connection -ComputerName $h -Count 1 -Quiet -ErrorAction SilentlyContinue
@@ -277,9 +298,12 @@ if ($SetTime -or $SetTimeOnly) {
             "echo '$Password' | sudo -S hwclock -w >/dev/null 2>&1; " +
             "date '+%Y-%m-%d %H:%M:%S'"
 
-        $out = & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 `
-                    -o BatchMode=yes -o LogLevel=ERROR -i $keyPath "$User@$h" $remoteCmd 2>&1
-        $stamps = @($out | ForEach-Object { "$_" } | Where-Object { $_ -match '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$' })
+        $res = Invoke-SshTimed -TimeoutSec 40 -SshArgs @(
+            '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL', '-o', 'ConnectTimeout=10',
+            '-o', 'BatchMode=yes', '-o', 'ServerAliveInterval=5', '-o', 'ServerAliveCountMax=3',
+            '-o', 'LogLevel=ERROR', '-i', $keyPath, "$User@$h", $remoteCmd)
+        $out = $res.Output
+        $stamps = @($out | Where-Object { $_ -match '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$' })
 
         if ($stamps.Count -ge 2) {
             $before = $stamps[0]
