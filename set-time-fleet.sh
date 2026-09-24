@@ -73,14 +73,19 @@ ok=0; fail=0; drifted=0
 for host in "${HOSTS[@]}"; do
     NOW=$(date '+%Y-%m-%d %H:%M:%S')
     if [ "$CHECK_ONLY" = "1" ]; then
-        REMOTE="date '+%Y-%m-%d %H:%M:%S'"
+        REMOTE="date '+%Y-%m-%d %H:%M:%S'; echo TZ=\$(date '+%Z %z')"
     else
-        REMOTE="BEFORE=\$(date '+%Y-%m-%d %H:%M:%S');
-                echo '$SSH_PASS' | sudo -S timedatectl set-ntp false >/dev/null 2>&1;
-                echo '$SSH_PASS' | sudo -S timedatectl set-time '$NOW' >/dev/null 2>&1 ||
-                echo '$SSH_PASS' | sudo -S date -s '$NOW' >/dev/null 2>&1;
-                echo '$SSH_PASS' | sudo -S hwclock -w >/dev/null 2>&1;
-                echo \"\$BEFORE -> \$(date '+%Y-%m-%d %H:%M:%S')\""
+        # Plain lines and single quotes only: nested double quotes do not
+        # survive the trip through ssh. The zone is set first, because the
+        # time handed over is local wall-clock - a camera left on UTC would
+        # otherwise end up hours ahead.
+        REMOTE="date '+%Y-%m-%d %H:%M:%S'; \
+                echo '$SSH_PASS' | sudo -S timedatectl set-timezone '$TZ_WANTED' >/dev/null 2>&1; \
+                echo '$SSH_PASS' | sudo -S timedatectl set-ntp false >/dev/null 2>&1; \
+                echo '$SSH_PASS' | sudo -S timedatectl set-time '$NOW' >/dev/null 2>&1 || \
+                echo '$SSH_PASS' | sudo -S date -s '$NOW' >/dev/null 2>&1; \
+                echo '$SSH_PASS' | sudo -S hwclock -w >/dev/null 2>&1; \
+                date '+%Y-%m-%d %H:%M:%S'; echo TZ=\$(date '+%Z %z')"
     fi
 
     RAW=$($SSH_CMD $SSH_OPTS "$SSH_USER@$host" "$REMOTE" 2>&1)

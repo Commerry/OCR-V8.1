@@ -31,6 +31,7 @@ param(
     [int]    $ImagesDays = 0,
     [switch] $Restart,
     [string] $User = 'pi',
+    [string] $TimeZone = 'Asia/Bangkok',
     [string] $Password = 'raspberry',
     [int]    $Jobs = 6
 )
@@ -284,7 +285,7 @@ if ($reachable.Count -eq 0) {
 # empty even though the camera is working.
 if ($SetTime -or $SetTimeOnly) {
     Write-Host ''
-    Write-Host "ตั้งนาฬิกา $($reachable.Count) ตัว ให้ตรงกับเครื่องนี้ ($(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Cyan
+    Write-Host "ตั้งนาฬิกา $($reachable.Count) ตัว ให้ตรงกับเครื่องนี้ ($(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')) timezone $TimeZone" -ForegroundColor Cyan
     $fixed = 0
     foreach ($h in $reachable) {
         $now = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
@@ -292,11 +293,16 @@ if ($SetTime -or $SetTimeOnly) {
         # argument on the way out, and bash then read the > as a redirect
         # ("ambiguous redirect"). Two bare date lines are unambiguous.
         $remoteCmd = "date '+%Y-%m-%d %H:%M:%S'; " +
+            "echo TZ_BEFORE=`$(date '+%Z %z'); " +
+            # the time we hand over is local wall-clock, so the zone has to be
+            # right first - a camera sitting on UTC ends up 7 hours ahead
+            "echo '$Password' | sudo -S timedatectl set-timezone '$TimeZone' >/dev/null 2>&1; " +
             "echo '$Password' | sudo -S timedatectl set-ntp false >/dev/null 2>&1; " +
             "echo '$Password' | sudo -S timedatectl set-time '$now' >/dev/null 2>&1 || " +
             "echo '$Password' | sudo -S date -s '$now' >/dev/null 2>&1; " +
             "echo '$Password' | sudo -S hwclock -w >/dev/null 2>&1; " +
-            "date '+%Y-%m-%d %H:%M:%S'"
+            "date '+%Y-%m-%d %H:%M:%S'; " +
+            "echo TZ_AFTER=`$(date '+%Z %z')"
 
         $res = Invoke-SshTimed -TimeoutSec 40 -SshArgs @(
             '-o', 'StrictHostKeyChecking=no', '-o', 'UserKnownHostsFile=NUL', '-o', 'ConnectTimeout=10',
@@ -311,7 +317,9 @@ if ($SetTime -or $SetTimeOnly) {
             $drift = [math]::Abs(((Get-Date $after) - (Get-Date $before)).TotalMinutes)
             $note = if ($drift -gt 5) { "  << เพี้ยน $([int]$drift) นาที แก้แล้ว" } else { '  (ตรงอยู่แล้ว)' }
             $color = if ($drift -gt 5) { 'Yellow' } else { 'Green' }
-            Write-Host ("   {0,-16} {1}  =>  {2}{3}" -f $h, $before, $after, $note) -ForegroundColor $color
+            $zoneLine = @($out | Where-Object { $_ -match '^TZ_AFTER=' }) -join ''
+            $zone = if ($zoneLine -match '^TZ_AFTER=(.+)$') { ' [' + $Matches[1].Trim() + ']' } else { '' }
+            Write-Host ("   {0,-16} {1}  =>  {2}{3}{4}" -f $h, $before, $after, $zone, $note) -ForegroundColor $color
             $fixed++
         } else {
             $why = (($out | ForEach-Object { "$_" }) -join ' ').Trim()
