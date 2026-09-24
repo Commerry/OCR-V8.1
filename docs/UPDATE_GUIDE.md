@@ -254,3 +254,27 @@ cd $env:USERPROFILE\cam-tools
 
 ถ้ายังไม่มีสคริปต์บนเครื่อง Windows: ติดตั้ง Git for Windows แล้ว
 `git clone https://github.com/Commerry/OCR-V8.1.git $env:USERPROFILE\cam-tools`
+
+---
+
+## ตั้งนาฬิกากล้องทุกตัวพร้อมกัน
+
+CM4 ไม่มีถ่าน RTC ดับไฟแล้วเวลาย้อน ผลคือค่าที่อ่านได้ถูกประทับเวลาเป็นอดีต Center เก็บไว้ในวันเก่า รายงานของสัปดาห์ปัจจุบันจึงว่างทั้งที่กล้องทำงานปกติ
+
+**จาก Windows** (ใช้ ssh key ที่ติดตั้งไว้แล้ว):
+```powershell
+cd $env:USERPROFILE\cam-tools
+.\clean-my-cameras.ps1 -SetTimeOnly      # ตั้งเวลาอย่างเดียว
+.\clean-my-cameras.ps1 -SetTime -Restart # ตั้งเวลา + เคลียร์พื้นที่ไปด้วย
+```
+
+**จากเครื่อง Center (Linux)**:
+```bash
+bash set-time-fleet.sh --check --from-db ~/Desktop/OCR-Center-main   # ดูก่อนว่าตัวไหนเพี้ยน
+bash set-time-fleet.sh -p raspberry --from-db ~/Desktop/OCR-Center-main
+```
+
+ทั้งสองแบบจะแสดงเวลาก่อน/หลังของแต่ละตัว และบอกว่าตัวไหนเพี้ยนไปกี่นาที
+
+> ตรวจเวลาของเครื่องที่ใช้สั่งให้ถูกก่อน (`date`) เพราะมันคือต้นทางที่กล้องจะยึดตาม
+> ข้อมูลเก่าที่บันทึกด้วยเวลาผิดยังอยู่ในวันเก่า ย้อนแก้ไม่ได้ ถ้าจะดูต้องเลือกช่วงวันตามเวลาที่กล้องบันทึกไว้

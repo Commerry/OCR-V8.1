@@ -26,6 +26,8 @@
 [CmdletBinding()]
 param(
     [switch] $ReportOnly,
+    [switch] $SetTime,
+    [switch] $SetTimeOnly,
     [int]    $ImagesDays = 0,
     [switch] $Restart,
     [string] $User = 'pi',
@@ -253,6 +255,44 @@ if ($reachable.Count -eq 0) {
     Write-Host ''
     Write-Host 'ไม่มีกล้องที่เข้าถึงได้เลย - ตรวจสายแลน/วงเน็ตก่อน' -ForegroundColor Red
     exit 1
+}
+
+# ---- 4.5 ตั้งนาฬิกาให้ตรงกับเครื่องนี้ ----
+# A camera whose clock is behind stamps its reads with a past time, so the
+# center files them under old dates and reports for the current week come out
+# empty even though the camera is working.
+if ($SetTime -or $SetTimeOnly) {
+    Write-Host ''
+    Write-Host "ตั้งนาฬิกา $($reachable.Count) ตัว ให้ตรงกับเครื่องนี้ ($(Get-Date -Format 'yyyy-MM-dd HH:mm:ss'))" -ForegroundColor Cyan
+    $fixed = 0
+    foreach ($h in $reachable) {
+        $now = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+        $remoteCmd = "BEFORE=`$(date '+%Y-%m-%d %H:%M:%S'); " +
+            "echo '$Password' | sudo -S timedatectl set-ntp false >/dev/null 2>&1; " +
+            "echo '$Password' | sudo -S timedatectl set-time '$now' >/dev/null 2>&1 || " +
+            "echo '$Password' | sudo -S date -s '$now' >/dev/null 2>&1; " +
+            "echo '$Password' | sudo -S hwclock -w >/dev/null 2>&1; " +
+            "echo `"`$BEFORE -> `$(date '+%Y-%m-%d %H:%M:%S')`""
+        $out = (& ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 `
+                    -o BatchMode=yes -o LogLevel=ERROR -i $keyPath "$User@$h" $remoteCmd 2>&1 | Out-String).Trim()
+        if ($out -match '(\d{4}-\d{2}-\d{2} [\d:]+) -> (\d{4}-\d{2}-\d{2} [\d:]+)') {
+            $before = $Matches[1]; $after = $Matches[2]
+            $drift = [math]::Abs(((Get-Date $after) - (Get-Date $before)).TotalMinutes)
+            $note = if ($drift -gt 5) { "  (เพี้ยนไป $([int]$drift) นาที - แก้แล้ว)" } else { '  (ตรงอยู่แล้ว)' }
+            $color = if ($drift -gt 5) { 'Yellow' } else { 'Green' }
+            Write-Host ("   {0,-16} {1} -> {2}{3}" -f $h, $before, $after, $note) -ForegroundColor $color
+            $fixed++
+        } else {
+            Write-Host ("   {0,-16} ตั้งเวลาไม่สำเร็จ: {1}" -f $h, ($out -split "`n")[0]) -ForegroundColor Red
+        }
+    }
+    Write-Host "ตั้งเวลาสำเร็จ $fixed จาก $($reachable.Count) ตัว" -ForegroundColor Cyan
+    if ($SetTimeOnly) {
+        if ($askPass) { Remove-Item $askPass -Force -ErrorAction SilentlyContinue }
+        Write-Host ''
+        Write-Host 'ข้อมูลที่บันทึกไว้ด้วยเวลาเดิมยังอยู่ในวันเก่า ย้อนแก้ไม่ได้ - ข้อมูลใหม่จะตรงแล้ว' -ForegroundColor DarkYellow
+        exit 0
+    }
 }
 
 # ---- 5. เคลียร์ ----
