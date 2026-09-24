@@ -267,23 +267,31 @@ if ($SetTime -or $SetTimeOnly) {
     $fixed = 0
     foreach ($h in $reachable) {
         $now = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-        $remoteCmd = "BEFORE=`$(date '+%Y-%m-%d %H:%M:%S'); " +
+        # No nested double quotes and no "->" in here: Windows ssh rewrites the
+        # argument on the way out, and bash then read the > as a redirect
+        # ("ambiguous redirect"). Two bare date lines are unambiguous.
+        $remoteCmd = "date '+%Y-%m-%d %H:%M:%S'; " +
             "echo '$Password' | sudo -S timedatectl set-ntp false >/dev/null 2>&1; " +
             "echo '$Password' | sudo -S timedatectl set-time '$now' >/dev/null 2>&1 || " +
             "echo '$Password' | sudo -S date -s '$now' >/dev/null 2>&1; " +
             "echo '$Password' | sudo -S hwclock -w >/dev/null 2>&1; " +
-            "echo `"`$BEFORE -> `$(date '+%Y-%m-%d %H:%M:%S')`""
-        $out = (& ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 `
-                    -o BatchMode=yes -o LogLevel=ERROR -i $keyPath "$User@$h" $remoteCmd 2>&1 | Out-String).Trim()
-        if ($out -match '(\d{4}-\d{2}-\d{2} [\d:]+) -> (\d{4}-\d{2}-\d{2} [\d:]+)') {
-            $before = $Matches[1]; $after = $Matches[2]
+            "date '+%Y-%m-%d %H:%M:%S'"
+
+        $out = & ssh -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL -o ConnectTimeout=10 `
+                    -o BatchMode=yes -o LogLevel=ERROR -i $keyPath "$User@$h" $remoteCmd 2>&1
+        $stamps = @($out | ForEach-Object { "$_" } | Where-Object { $_ -match '^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$' })
+
+        if ($stamps.Count -ge 2) {
+            $before = $stamps[0]
+            $after = $stamps[-1]
             $drift = [math]::Abs(((Get-Date $after) - (Get-Date $before)).TotalMinutes)
-            $note = if ($drift -gt 5) { "  (เพี้ยนไป $([int]$drift) นาที - แก้แล้ว)" } else { '  (ตรงอยู่แล้ว)' }
+            $note = if ($drift -gt 5) { "  << เพี้ยน $([int]$drift) นาที แก้แล้ว" } else { '  (ตรงอยู่แล้ว)' }
             $color = if ($drift -gt 5) { 'Yellow' } else { 'Green' }
-            Write-Host ("   {0,-16} {1} -> {2}{3}" -f $h, $before, $after, $note) -ForegroundColor $color
+            Write-Host ("   {0,-16} {1}  =>  {2}{3}" -f $h, $before, $after, $note) -ForegroundColor $color
             $fixed++
         } else {
-            Write-Host ("   {0,-16} ตั้งเวลาไม่สำเร็จ: {1}" -f $h, ($out -split "`n")[0]) -ForegroundColor Red
+            $why = (($out | ForEach-Object { "$_" }) -join ' ').Trim()
+            Write-Host ("   {0,-16} ตั้งเวลาไม่สำเร็จ: {1}" -f $h, $why.Substring(0, [Math]::Min(90, $why.Length))) -ForegroundColor Red
         }
     }
     Write-Host "ตั้งเวลาสำเร็จ $fixed จาก $($reachable.Count) ตัว" -ForegroundColor Cyan
