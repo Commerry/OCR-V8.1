@@ -278,3 +278,46 @@ bash set-time-fleet.sh -p raspberry --from-db ~/Desktop/OCR-Center-main
 
 > ตรวจเวลาของเครื่องที่ใช้สั่งให้ถูกก่อน (`date`) เพราะมันคือต้นทางที่กล้องจะยึดตาม
 > ข้อมูลเก่าที่บันทึกด้วยเวลาผิดยังอยู่ในวันเก่า ย้อนแก้ไม่ได้ ถ้าจะดูต้องเลือกช่วงวันตามเวลาที่กล้องบันทึกไว้
+
+---
+
+## นาฬิกากล้องตั้งเองอัตโนมัติจาก Center
+
+ตั้งแต่เวอร์ชันนี้ ไม่ต้องไล่ตั้งเวลากล้องอีก กล้องแก้นาฬิกาตัวเองทุกครั้งที่คุยกับ Center
+
+**ทำงานยังไง**
+
+1. กล้องส่ง heartbeat ตามปกติ (ทุก 30 วิ) พร้อมเวลาของตัวเอง
+2. Center ตอบกลับมาพร้อม `serverTime` + `timeZone`
+3. กล้องเทียบ ถ้าต่างเกิน 5 วินาที ตั้งนาฬิกาใหม่ทันที (ตั้งเป็น UTC ไม่มีปัญหาเรื่อง timezone) แล้วเขียนลง hwclock และ fake-hwclock
+4. heartbeat แรกหลังไฟดับ = แก้เวลาให้เองทันที
+
+ไม่ต้องใช้ NTP (กล้องออกเน็ตไม่ได้เพราะ proxy อยู่แล้ว) และไม่ว่ากล้องจะต่อเข้าระบบก่อนหรือหลัง ทุกตัวจะเทียบกับ Center ตัวเดียวกันเสมอ
+
+**สิทธิ์ที่ต้องมี** — ตั้งนาฬิกาต้องใช้ root จึงติดตั้งกฎ sudo เฉพาะคำสั่งเรื่องเวลาไว้ที่ `/etc/sudoers.d/ocr-settime` (ไม่ได้ให้สิทธิ์ root ทั่วไป) `install.sh` กับ `update.sh` ติดตั้งให้เอง กล้องที่อัปเดตด้วย `git pull` เฉยๆ ต้องสั่งครั้งเดียว:
+
+```bash
+cd ~/Desktop/OCR-V8.1
+sudo bash tools/install-timesync-sudoers.sh
+pm2 restart ocr
+```
+
+ทำทั้ง fleet ทีเดียว:
+```powershell
+cd $env:USERPROFILE\cam-tools
+$k="$env:USERPROFILE\.ssh\ocr_fleet_ed25519"
+foreach($ip in (Get-Content cameras.txt)){
+  ssh -i $k -o LogLevel=ERROR pi@$ip "cd ~/Desktop/OCR-V8.1 && git pull && echo raspberry | sudo -S bash tools/install-timesync-sudoers.sh pi && pm2 restart ocr"
+}
+```
+
+**ดูว่าทำงานไหม** — บนกล้อง:
+```bash
+pm2 logs ocr --lines 30 --nostream | grep timeSync
+```
+เห็น `timeSync: ตั้งนาฬิกาใหม่จากเวลาเซิร์ฟเวอร์ (... ต่าง N วินาที)` = ทำงานแล้ว
+
+บน Center จะมี log บอกว่าอุปกรณ์ไหนเวลาเพี้ยนเกิน 2 นาที:
+```bash
+pm2 logs ocr-center --lines 50 --nostream | grep นาฬิกา
+```

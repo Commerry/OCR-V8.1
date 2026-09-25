@@ -1,4 +1,5 @@
 import os from 'os';
+import timeSync from './timeSync';
 import { getConfig } from './getConfig';
 import { getSystemHealth, getNetworkIdentity } from './systemHealth';
 import {
@@ -22,7 +23,7 @@ import {
  * {
  *   "type": "heartbeat",
  *   "deviceId": "dc:a6:32:aa:bb:cc",           // MAC, stable per device
- *   "sentAt": "2026-07-31T08:00:00.000Z",
+ *   "sentAt": "2026-07-31T08:00:00.000Z",          // this device's clock
  *   "device": {
  *     "hostname": "cm4-line-1",
  *     "ip": "10.31.182.51",
@@ -60,6 +61,15 @@ import {
  *
  * Central should answer 2xx. Anything else is logged and retried on the next
  * interval (recentReads are kept until a heartbeat succeeds, capped at 100).
+ *
+ * The answer carries the central's own time:
+ *   { "ok": true, "serverTime": "2026-09-26T03:00:00.000Z", "timeZone": "Asia/Bangkok" }
+ * which this device uses to correct its clock. A CM4 has no RTC battery, so
+ * after a power cut it wakes up weeks in the past and stamps every read with
+ * that wrong time - the reads then land on the wrong day in the central and
+ * reports come back empty. Syncing on every reply, and therefore on the first
+ * reply after a reboot, ends that for good without needing an NTP server the
+ * cameras cannot reach anyway.
  */
 
 const DEFAULT_SETTINGS = {
@@ -161,6 +171,16 @@ const sendHeartbeat = async (overrideSettings) => {
     if (ok) {
       // reads delivered - drop them from the buffer
       clearRecentReads(readCount);
+
+      // correct our clock from the central's before anything else is stamped
+      try {
+        const answer = await response.clone().json();
+        if (answer && answer.serverTime) {
+          await timeSync.syncFromServer(answer.serverTime, answer.timeZone);
+        }
+      } catch (error) {
+        // an older central answers without a time - nothing to do
+      }
     }
     lastResult = { ok, at: new Date().toISOString(), status: response.status, error: null };
     return lastResult;
@@ -208,6 +228,8 @@ const getSettings = () => ({ ...settings });
 
 const getLastResult = () => ({ ...lastResult });
 
+const getTimeSync = () => timeSync.getState();
+
 const start = () => {
   const config = getConfig();
   updateSettings(config.central);
@@ -218,5 +240,6 @@ export default {
   updateSettings,
   getSettings,
   getLastResult,
+  getTimeSync,
   sendHeartbeat,
 };

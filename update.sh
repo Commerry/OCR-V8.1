@@ -134,6 +134,13 @@ if [ ! -f config.json ] && [ -f config.example.json ]; then
     echo "created config.json from config.example.json"
 fi
 
+# Let the program correct its own clock from the central server. A CM4 has no
+# RTC battery, so after a power cut it wakes up in the past and stamps every
+# read with the wrong time. The rule covers the time commands only.
+if [ -f tools/install-timesync-sudoers.sh ]; then
+    sudo bash tools/install-timesync-sudoers.sh "$(id -un)" ||         echo "warn: ตั้งสิทธิ์ตั้งเวลาไม่สำเร็จ - กล้องจะยังทำงานได้แต่ต้องตั้งเวลาเอง"
+fi
+
 npm install --no-audit --no-fund --legacy-peer-deps
 chmod +x node_modules/.bin/*
 npm run build || echo "warn: build failed (app runs from src - continuing)"
