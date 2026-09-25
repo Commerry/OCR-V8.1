@@ -66,14 +66,21 @@ if (-not (Test-Path $keyPath)) {
     exit 1
 }
 
-function Invoke-SshTimed {
-    param([string] $RemoteHost, [string] $Command, [int] $Sec = 60)
+# The script is piped in on stdin rather than passed as an argument: Windows
+# ssh rewrites arguments, and a command carrying quotes came out mangled on the
+# far side (an earlier version failed with "ambiguous redirect" and this one
+# came back empty).
+function Invoke-SshScript {
+    param([string] $RemoteHost, [string] $Script, [int] $Sec = 60)
+    $body = $Script -replace "`r", ''
     $job = Start-Job -ScriptBlock {
-        param($k, $u, $h, $c)
-        & ssh -i $k -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL `
-              -o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 `
-              -o LogLevel=ERROR "$u@$h" $c 2>&1
-    } -ArgumentList $keyPath, $User, $RemoteHost, $Command
+        param($k, $u, $h, $b)
+        $ErrorActionPreference = 'Continue'
+        $b | & ssh -i $k -o BatchMode=yes -o StrictHostKeyChecking=no -o UserKnownHostsFile=NUL `
+                   -o ConnectTimeout=8 -o ServerAliveInterval=5 -o ServerAliveCountMax=3 `
+                   -o LogLevel=ERROR "$u@$h" 'bash -s' 2>&1
+    } -ArgumentList $keyPath, $User, $RemoteHost, $body
+
     if (Wait-Job $job -Timeout $Sec) {
         $o = Receive-Job $job -ErrorAction SilentlyContinue
         Remove-Job $job -Force -ErrorAction SilentlyContinue
@@ -84,41 +91,42 @@ function Invoke-SshTimed {
     return @("TIMEOUT ไม่ตอบใน $Sec วินาที")
 }
 
+# a path starting with ~ has to become $HOME: it is expanded by the remote
+# shell, not by us
+$remoteDir = $AppDir -replace '^~', '$HOME'
+
 # ---------------------------------------------------------------- status ----
-# Everything here only reads: git state, what the site has modified locally,
-# the clock, and whether the sudo rule is in place.
-$statusCmd = @"
-cd $AppDir 2>/dev/null || { echo 'ERR ไม่พบโฟลเดอร์ $AppDir'; exit 1; }
-echo "COMMIT `$(git log --oneline -1 2>/dev/null || echo 'ไม่ใช่ git repo')"
-echo "BRANCH `$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
-echo "DIRTY `$(git status --porcelain 2>/dev/null | grep -v '^??' | wc -l)"
+# Reads only: git state, what this site has modified, the clock, the sudo rule.
+$statusScript = @"
+cd $remoteDir 2>/dev/null || { echo ERRDIR; exit 1; }
+echo COMMIT `$(git log --oneline -1 2>/dev/null || echo not-a-git-repo)
+echo DIRTY `$(git status --porcelain 2>/dev/null | grep -v '^??' | wc -l)
 git status --porcelain 2>/dev/null | grep -v '^??' | head -5 | sed 's/^/DIRTYFILE /'
-echo "TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')"
-echo "SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)"
-echo "TIMESYNC `$([ -f src/utils/timeSync.js ] && echo yes || echo no)"
-echo "PM2 `$(pm2 list 2>/dev/null | grep -c online)"
-echo "CENTRAL `$(grep -o '\"url\":\"[^\"]*\"' config.json 2>/dev/null | head -1)"
+echo TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')
+echo SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
+echo TIMESYNC `$([ -f src/utils/timeSync.js ] && echo yes || echo no)
+echo PM2 `$(pm2 list 2>/dev/null | grep -c online)
+echo CENTRAL `$(grep -o 'url[^,]*' config.json 2>/dev/null | head -1)
 "@
 
 # ----------------------------------------------------------------- apply ----
-# Fetch, then check out ONLY the listed paths. Nothing else in the working tree
-# is touched - not config.json (git does not track it), not the web pages.
-$applyCmd = @"
-cd $AppDir 2>/dev/null || { echo 'ERR ไม่พบโฟลเดอร์ $AppDir'; exit 1; }
-[ -d .git ] || { echo 'ERR ไม่ใช่ git repo - ต้องต่อ git ก่อน'; exit 1; }
+# Checks out the listed paths and nothing else - config.json and the web pages
+# are never in that list.
+$applyScript = @"
+cd $remoteDir 2>/dev/null || { echo ERRDIR; exit 1; }
+[ -d .git ] || { echo ERRNOGIT; exit 1; }
 git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
 if ! git fetch origin main >/tmp/ts-fetch.log 2>&1; then
-    git -c http.sslVerify=false fetch origin main >/tmp/ts-fetch.log 2>&1 || { echo 'ERR fetch ไม่สำเร็จ'; tail -2 /tmp/ts-fetch.log; exit 1; }
+    git -c http.sslVerify=false fetch origin main >/tmp/ts-fetch.log 2>&1 || { echo ERRFETCH; tail -2 /tmp/ts-fetch.log; exit 1; }
 fi
-BEFORE=`$(git rev-parse --short HEAD)
-git checkout origin/main -- $($FILES -join ' ') || { echo 'ERR checkout ไม่สำเร็จ'; exit 1; }
-echo "FILES `$(git diff --cached --name-only | tr '\n' ' ')"
+git checkout origin/main -- $($FILES -join ' ') || { echo ERRCHECKOUT; exit 1; }
+echo FILES `$(git diff --cached --name-only | tr '
+' ' ')
 echo '$Password' | sudo -S bash tools/install-timesync-sudoers.sh $User >/tmp/ts-sudo.log 2>&1
-echo "SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)"
+echo SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
 pm2 restart $Pm2Name >/dev/null 2>&1
-echo "RESTARTED `$(pm2 list 2>/dev/null | grep -c online)"
-echo "HEAD `$BEFORE (ไฟล์อื่นไม่ถูกแตะ)"
-echo "TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')"
+echo PM2 `$(pm2 list 2>/dev/null | grep -c online)
+echo TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')
 "@
 
 $mode = if ($Apply) { 'apply' } else { 'status' }
@@ -134,10 +142,11 @@ $n = 0
 $problems = @()
 foreach ($h in $Hosts) {
     $n++
-    $lines = Invoke-SshTimed -RemoteHost $h -Command $(if ($Apply) { $applyCmd } else { $statusCmd }) -Sec $TimeoutSec
+    $lines = Invoke-SshScript -RemoteHost $h -Script $(if ($Apply) { $applyScript } else { $statusScript }) -Sec $TimeoutSec
     $get = { param($key) ($lines | Where-Object { $_ -like "$key *" } | Select-Object -First 1) -replace "^$key ", '' }
 
-    if (($lines -join ' ') -match 'TIMEOUT|^ERR |ERR ไม่') {
+    $joined = ($lines -join ' ')
+    if ($joined -match 'TIMEOUT|ERRDIR|ERRNOGIT|ERRFETCH|ERRCHECKOUT' -or -not ($joined -match 'TIME ')) {
         Write-Host ("[{0,2}/{1}] {2,-16} ปัญหา: {3}" -f $n, $Hosts.Count, $h, (($lines | Select-Object -First 2) -join ' ')) -ForegroundColor Red
         $problems += $h
         continue
