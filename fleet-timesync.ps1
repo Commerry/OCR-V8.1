@@ -98,23 +98,52 @@ $remoteDir = $AppDir -replace '^~', '$HOME'
 # ---------------------------------------------------------------- status ----
 # Reads only: git state, what this site has modified, the clock, the sudo rule.
 $statusScript = @"
-cd $remoteDir 2>/dev/null || { echo ERRDIR; exit 1; }
-echo COMMIT `$(git log --oneline -1 2>/dev/null || echo not-a-git-repo)
-echo DIRTY `$(git status --porcelain 2>/dev/null | grep -v '^??' | wc -l)
-git status --porcelain 2>/dev/null | grep -v '^??' | head -5 | sed 's/^/DIRTYFILE /'
+# Find the program even when it is not where we expect - several cameras were
+# installed to a different path.
+DIR=$remoteDir
+[ -d "`$DIR" ] || DIR=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
+[ -d "`$DIR" ] || DIR=`$(ls -d `$HOME/Desktop/OCR* `$HOME/OCR* 2>/dev/null | head -1)
+[ -d "`$DIR" ] || { echo ERRDIR; exit 1; }
+cd "`$DIR" || { echo ERRDIR; exit 1; }
+echo DIR `$DIR
+
+echo COMMIT `$(git log --oneline -1 2>/dev/null | cut -c1-60 || echo not-a-git-repo)
 echo TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')
 echo SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
 echo TIMESYNC `$([ -f src/utils/timeSync.js ] && echo yes || echo no)
+
+# What the new centralReporter.js needs to exist already. The commit label
+# cannot answer this: some cameras were updated by copying files over an old
+# checkout, so the working tree is newer than the commit says.
+echo HASHEALTH `$([ -f src/utils/systemHealth.js ] && echo yes || echo no)
+echo HASRUNNER `$(grep -c 'getRecentReads' src/ocrRunner.js 2>/dev/null || echo 0)
+echo HASWIRE `$(grep -c 'centralReporter' src/server.js 2>/dev/null || echo 0)
+
+# Has this site edited any of the files we would overwrite?
+echo TARGETDIRTY `$(git status --porcelain -- $($FILES -join ' ') 2>/dev/null | grep -v '^??' | wc -l)
+git status --porcelain -- $($FILES -join ' ') 2>/dev/null | grep -v '^??' | sed 's/^/TARGETFILE /'
+echo OTHERDIRTY `$(git status --porcelain 2>/dev/null | grep -v '^??' | wc -l)
 echo PM2 `$(pm2 list 2>/dev/null | grep -c online)
-echo CENTRAL `$(grep -o 'url[^,]*' config.json 2>/dev/null | head -1)
 "@
 
 # ----------------------------------------------------------------- apply ----
 # Checks out the listed paths and nothing else - config.json and the web pages
 # are never in that list.
 $applyScript = @"
-cd $remoteDir 2>/dev/null || { echo ERRDIR; exit 1; }
+DIR=$remoteDir
+[ -d "`$DIR" ] || DIR=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
+[ -d "`$DIR" ] || DIR=`$(ls -d `$HOME/Desktop/OCR* `$HOME/OCR* 2>/dev/null | head -1)
+[ -d "`$DIR" ] || { echo ERRDIR; exit 1; }
+cd "`$DIR" || { echo ERRDIR; exit 1; }
+echo DIR `$DIR
 [ -d .git ] || { echo ERRNOGIT; exit 1; }
+
+# the new centralReporter leans on these; without them the program would not
+# start after the swap
+[ -f src/utils/systemHealth.js ] || { echo ERRDEPS systemHealth; exit 1; }
+grep -q 'getRecentReads' src/ocrRunner.js 2>/dev/null || { echo ERRDEPS ocrRunner; exit 1; }
+
+cp -a src/utils/centralReporter.js /tmp/centralReporter.bak.js 2>/dev/null
 git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
 if ! git fetch origin main >/tmp/ts-fetch.log 2>&1; then
     git -c http.sslVerify=false fetch origin main >/tmp/ts-fetch.log 2>&1 || { echo ERRFETCH; tail -2 /tmp/ts-fetch.log; exit 1; }
@@ -122,10 +151,20 @@ fi
 git checkout origin/main -- $($FILES -join ' ') || { echo ERRCHECKOUT; exit 1; }
 echo FILES `$(git diff --cached --name-only | tr '
 ' ' ')
+
 echo '$Password' | sudo -S bash tools/install-timesync-sudoers.sh $User >/tmp/ts-sudo.log 2>&1
 echo SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
+
 pm2 restart $Pm2Name >/dev/null 2>&1
-echo PM2 `$(pm2 list 2>/dev/null | grep -c online)
+sleep 4
+ONLINE=`$(pm2 list 2>/dev/null | grep -c online)
+echo PM2 `$ONLINE
+# a program that will not come back up gets its old file returned
+if [ "`$ONLINE" = "0" ]; then
+    cp -a /tmp/centralReporter.bak.js src/utils/centralReporter.js 2>/dev/null
+    pm2 restart $Pm2Name >/dev/null 2>&1
+    echo ROLLEDBACK yes
+fi
 echo TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')
 "@
 
@@ -155,28 +194,60 @@ foreach ($h in $Hosts) {
     if ($Apply) {
         $files = (& $get 'FILES').Trim()
         $sudoers = & $get 'SUDOERS'
+        $online = [int](& $get 'PM2')
+        $rolled = & $get 'ROLLEDBACK'
         $time = & $get 'TIME'
-        $okColor = if ($sudoers -eq 'yes') { 'Green' } else { 'Yellow' }
-        Write-Host ("[{0,2}/{1}] {2,-16} อัปเดต: {3}" -f $n, $Hosts.Count, $h, ($(if ($files) { $files } else { '(ไม่มีไฟล์เปลี่ยน)' }))) -ForegroundColor $okColor
-        Write-Host ("                  สิทธิ์ตั้งเวลา: {0}   เวลาเครื่อง: {1}" -f $sudoers, $time)
-        if ($sudoers -ne 'yes') { $problems += $h }
+        if ($rolled -eq 'yes') {
+            Write-Host ("[{0,2}/{1}] {2,-16} โปรแกรมไม่ขึ้นหลังเปลี่ยนไฟล์ - คืนไฟล์เดิมให้แล้ว" -f $n, $Hosts.Count, $h) -ForegroundColor Red
+            $problems += $h
+        } elseif ($sudoers -eq 'yes' -and $online -gt 0) {
+            Write-Host ("[{0,2}/{1}] {2,-16} อัปเดตแล้ว: {3}" -f $n, $Hosts.Count, $h, $files) -ForegroundColor Green
+            Write-Host ("                  สิทธิ์ตั้งเวลา: yes   pm2 online: {0}   เวลา: {1}" -f $online, $time)
+        } else {
+            Write-Host ("[{0,2}/{1}] {2,-16} อัปไฟล์แล้วแต่ยังไม่ครบ (สิทธิ์={3} online={4})" -f $n, $Hosts.Count, $h, $sudoers, $online) -ForegroundColor Yellow
+            $problems += $h
+        }
     } else {
-        $commit = & $get 'COMMIT'
-        $dirty = [int](& $get 'DIRTY')
+        $commit = (& $get 'COMMIT')
+        $dir = & $get 'DIR'
         $time = & $get 'TIME'
         $sudoers = & $get 'SUDOERS'
         $hasSync = & $get 'TIMESYNC'
-        $central = & $get 'CENTRAL'
-        $color = if ($dirty -gt 0) { 'Yellow' } else { 'Green' }
-        Write-Host ("[{0,2}/{1}] {2,-16} {3}" -f $n, $Hosts.Count, $h, $commit) -ForegroundColor $color
-        Write-Host ("                  เวลา: {0}   timeSync: {1}   สิทธิ์: {2}" -f $time, $hasSync, $sudoers)
-        if ($central) { Write-Host ("                  central: {0}" -f $central) -ForegroundColor DarkGray }
-        if ($dirty -gt 0) {
-            Write-Host ("                  มีไฟล์ที่แก้ไว้เอง {0} ไฟล์:" -f $dirty) -ForegroundColor Yellow
-            $lines | Where-Object { $_ -like 'DIRTYFILE *' } | ForEach-Object {
-                Write-Host ("                     {0}" -f ($_ -replace '^DIRTYFILE ', '')) -ForegroundColor Yellow
-            }
+        $hasHealth = & $get 'HASHEALTH'
+        $hasRunner = [int](& $get 'HASRUNNER')
+        $hasWire = [int](& $get 'HASWIRE')
+        $targetDirty = [int](& $get 'TARGETDIRTY')
+        $otherDirty = [int](& $get 'OTHERDIRTY')
+
+        # Can this camera take the three-file update as it stands?
+        $ready = ($hasHealth -eq 'yes') -and ($hasRunner -gt 0)
+        if ($hasSync -eq 'yes' -and $sudoers -eq 'yes') {
+            $verdict = 'อัปแล้ว'; $color = 'Green'
+        } elseif (-not $ready) {
+            $verdict = 'ยังอัปไม่ได้ - ขาดไฟล์ที่ต้องใช้'; $color = 'Red'
             $problems += $h
+        } elseif ($targetDirty -gt 0) {
+            $verdict = 'ไซต์แก้ไฟล์ที่จะทับไว้เอง - ต้องดูก่อน'; $color = 'Yellow'
+            $problems += $h
+        } else {
+            $verdict = 'พร้อมอัป'; $color = 'Cyan'
+        }
+
+        Write-Host ("[{0,2}/{1}] {2,-16} {3}" -f $n, $Hosts.Count, $h, $verdict) -ForegroundColor $color
+        Write-Host ("                  {0}" -f $commit) -ForegroundColor DarkGray
+        Write-Host ("                  เวลา: {0}   timeSync: {1}   สิทธิ์: {2}" -f $time, $hasSync, $sudoers)
+        Write-Host ("                  systemHealth: {0}   ocrRunner API: {1}   central ใน server.js: {2}" -f
+            $hasHealth, $(if ($hasRunner -gt 0) { 'yes' } else { 'no' }), $(if ($hasWire -gt 0) { 'yes' } else { 'no' }))
+        if ($dir -and $dir -ne ($AppDir -replace '^~', "/home/$User")) {
+            Write-Host ("                  โฟลเดอร์: {0}" -f $dir) -ForegroundColor DarkGray
+        }
+        if ($targetDirty -gt 0) {
+            Write-Host "                  ไฟล์ที่จะทับ แต่ไซต์แก้ไว้เอง:" -ForegroundColor Yellow
+            $lines | Where-Object { $_ -like 'TARGETFILE *' } | ForEach-Object {
+                Write-Host ("                     {0}" -f ($_ -replace '^TARGETFILE ', '')) -ForegroundColor Yellow
+            }
+        } elseif ($otherDirty -gt 0) {
+            Write-Host ("                  มีไฟล์อื่นที่แก้ไว้เอง {0} ไฟล์ - ไม่ถูกแตะ" -f $otherDirty) -ForegroundColor DarkGray
         }
     }
 }
