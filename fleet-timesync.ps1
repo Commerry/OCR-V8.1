@@ -25,6 +25,9 @@
 param(
     [switch]   $Status,
     [switch]   $Apply,
+    [switch]   $Verify,
+    [switch]   $TestSelfHeal,
+    [int]      $SkewHours = 3,
     [string[]] $Hosts,
     [string]   $HostFile,
     [string]   $User = 'pi',
@@ -168,7 +171,61 @@ fi
 echo TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')
 "@
 
-$mode = if ($Apply) { 'apply' } else { 'status' }
+# ---------------------------------------------------------------- verify ----
+# Proves the parts are there AND that they work: the sudo rule is exercised for
+# real, the clock is compared against this PC, and the program's own log is
+# checked for a sync having happened.
+$verifyScript = @"
+DIR=$remoteDir
+[ -d "`$DIR" ] || DIR=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
+[ -d "`$DIR" ] || DIR=`$(ls -d `$HOME/Desktop/OCR* `$HOME/OCR* 2>/dev/null | head -1)
+[ -d "`$DIR" ] || { echo ERRDIR; exit 1; }
+cd "`$DIR" || { echo ERRDIR; exit 1; }
+echo DIR `$DIR
+echo TIMESYNC `$([ -f src/utils/timeSync.js ] && echo yes || echo no)
+echo SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
+# does the rule actually work, without a password?
+echo SUDOOK `$(sudo -n timedatectl show -p Timezone --value >/dev/null 2>&1 && echo yes || echo no)
+echo EPOCH `$(date +%s)
+echo TZ `$(date '+%Z %z')
+echo PM2 `$(pm2 list 2>/dev/null | grep -c online)
+# a sync that already happened leaves a line in the program log
+echo SYNCLOG `$(grep -h timeSync logs/*.log `$HOME/.pm2/logs/*out*.log 2>/dev/null | tail -1 | cut -c1-120)
+echo SYNCCOUNT `$(grep -h -c timeSync logs/*.log `$HOME/.pm2/logs/*out*.log 2>/dev/null | paste -sd+ | bc 2>/dev/null || echo 0)
+# can this camera reach the central at all?
+URL=`$(grep -o 'http[^\"]*api/devices/heartbeat' config.json 2>/dev/null | head -1)
+echo CENTRALURL `$URL
+if [ -n "`$URL" ]; then
+    BASE=`$(echo "`$URL" | sed 's#/api/devices/heartbeat##')
+    echo CENTRALHTTP `$(curl -s -m 8 -o /dev/null -w '%{http_code}' "`$BASE/api/health")
+fi
+"@
+
+# ------------------------------------------------------------ self-heal ----
+# The real test: push the clock out on purpose and see the program pull it back
+# from the central on its next heartbeat. Nothing else is touched, and the
+# camera keeps reading throughout - the reads made during the skew simply
+# carry the wrong time, as they would after a power cut.
+$healStep1 = @"
+DIR=$remoteDir
+[ -d "`$DIR" ] || DIR=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
+[ -d "`$DIR" ] || { echo ERRDIR; exit 1; }
+cd "`$DIR" || exit 1
+echo BEFORE `$(date '+%Y-%m-%d %H:%M:%S')
+sudo -n date -u -s "`$(date -u -d '-$SkewHours hours' '+%Y-%m-%dT%H:%M:%SZ')" >/dev/null 2>&1   || { echo ERRSKEW ตั้งเวลาไม่ได้ - สิทธิ์ยังไม่ถูกติดตั้ง; exit 1; }
+echo SKEWED `$(date '+%Y-%m-%d %H:%M:%S')
+"@
+
+$healStep2 = @"
+DIR=$remoteDir
+[ -d "`$DIR" ] || DIR=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
+cd "`$DIR" 2>/dev/null || exit 1
+echo AFTER `$(date '+%Y-%m-%d %H:%M:%S')
+echo EPOCH `$(date +%s)
+echo LASTLOG `$(grep -h timeSync logs/*.log `$HOME/.pm2/logs/*out*.log 2>/dev/null | tail -1 | cut -c1-140)
+"@
+
+$mode = if ($Apply) { 'apply' } elseif ($Verify) { 'verify' } elseif ($TestSelfHeal) { 'self-heal test' } else { 'status' }
 Write-Host ''
 Write-Host "=== fleet-timesync ($mode) - กล้อง $($Hosts.Count) ตัว ===" -ForegroundColor Cyan
 if ($Apply) {
@@ -179,19 +236,90 @@ Write-Host ''
 
 $n = 0
 $problems = @()
+
+# The self-heal test has its own rhythm - skew the clock, wait for a heartbeat,
+# look again - so it runs here and exits instead of joining the report loop.
+if ($TestSelfHeal) {
+    Write-Host "จะเลื่อนนาฬิกากล้องถอยหลัง $SkewHours ชั่วโมงโดยตั้งใจ แล้วดูว่าดึงเวลากลับมาเองจาก Center ไหม" -ForegroundColor Yellow
+    Write-Host ''
+    foreach ($h in $Hosts) {
+        $n++
+        $before = Invoke-SshScript -RemoteHost $h -Script $healStep1 -Sec 40
+        $j = ($before -join ' ')
+        if ($j -match 'ERRDIR|ERRSKEW|TIMEOUT') {
+            Write-Host ("[{0,2}/{1}] {2,-16} เริ่มทดสอบไม่ได้: {3}" -f $n, $Hosts.Count, $h, $j.Trim()) -ForegroundColor Red
+            $problems += $h
+            continue
+        }
+        $skewed = (($before | Where-Object { $_ -like 'SKEWED *' }) -replace '^SKEWED ', '')
+        Write-Host ("[{0,2}/{1}] {2,-16} ตั้งเวลาผิดเป็น {3} - รอ 75 วินาทีให้ heartbeat ทำงาน" -f $n, $Hosts.Count, $h, $skewed) -ForegroundColor Cyan
+        Start-Sleep -Seconds 75
+
+        $after = Invoke-SshScript -RemoteHost $h -Script $healStep2 -Sec 40
+        $epochText = (($after | Where-Object { $_ -like 'EPOCH *' }) -replace '^EPOCH ', '').Trim()
+        $log = (($after | Where-Object { $_ -like 'LASTLOG *' }) -replace '^LASTLOG ', '')
+        $now = [int64][Math]::Floor((Get-Date).ToUniversalTime().Subtract([datetime]'1970-01-01').TotalSeconds)
+        $offBy = if ($epochText -match '^[0-9]+$') { [Math]::Abs([int64]$epochText - $now) } else { -1 }
+
+        if ($offBy -ge 0 -and $offBy -le 60) {
+            Write-Host ("                  ผ่าน - กล้องดึงเวลากลับมาเอง ต่างจากเครื่องนี้ {0} วินาที" -f $offBy) -ForegroundColor Green
+        } else {
+            Write-Host ("                  ไม่ผ่าน - ต่างอยู่ {0} วินาที (ยังไม่ได้อัปโค้ด หรือ heartbeat ไปไม่ถึง Center)" -f $offBy) -ForegroundColor Red
+            $problems += $h
+        }
+        if ($log) { Write-Host ("                  {0}" -f $log) -ForegroundColor DarkGray }
+    }
+    Write-Host ''
+    if ($problems.Count -eq 0) { Write-Host 'ผ่านทุกตัว - นาฬิกาแก้ตัวเองได้จริง' -ForegroundColor Green }
+    else { Write-Host "ไม่ผ่าน $($problems.Count) ตัว: $(($problems | Select-Object -Unique) -join ', ')" -ForegroundColor Red }
+    exit $(if ($problems.Count) { 1 } else { 0 })
+}
+
 foreach ($h in $Hosts) {
     $n++
-    $lines = Invoke-SshScript -RemoteHost $h -Script $(if ($Apply) { $applyScript } else { $statusScript }) -Sec $TimeoutSec
-    $get = { param($key) ($lines | Where-Object { $_ -like "$key *" } | Select-Object -First 1) -replace "^$key ", '' }
+    $script = if ($Apply) { $applyScript } elseif ($Verify) { $verifyScript } else { $statusScript }
+    $lines = Invoke-SshScript -RemoteHost $h -Script $script -Sec $TimeoutSec
+    # always a string, so a missing field cannot blow up .Trim() later
+    $get = { param($key) ('' + (($lines | Where-Object { $_ -like "$key *" } | Select-Object -First 1) -replace "^$key ", '')) }
 
     $joined = ($lines -join ' ')
-    if ($joined -match 'TIMEOUT|ERRDIR|ERRNOGIT|ERRFETCH|ERRCHECKOUT' -or -not ($joined -match 'TIME ')) {
+    $needsTimeLine = -not $Verify
+    if ($joined -match 'TIMEOUT|ERRDIR|ERRNOGIT|ERRFETCH|ERRCHECKOUT' -or ($needsTimeLine -and -not ($joined -match 'TIME '))) {
         Write-Host ("[{0,2}/{1}] {2,-16} ปัญหา: {3}" -f $n, $Hosts.Count, $h, (($lines | Select-Object -First 2) -join ' ')) -ForegroundColor Red
         $problems += $h
         continue
     }
 
-    if ($Apply) {
+    if ($Verify) {
+        $hasSync = & $get 'TIMESYNC'
+        $sudoOk = & $get 'SUDOOK'
+        $tz = & $get 'TZ'
+        $online = [int](& $get 'PM2')
+        $syncCount = (& $get 'SYNCCOUNT').Trim()
+        $lastLog = & $get 'SYNCLOG'
+        $http = (& $get 'CENTRALHTTP').Trim()
+        $epochText = (& $get 'EPOCH').Trim()
+        $now = [int64][Math]::Floor((Get-Date).ToUniversalTime().Subtract([datetime]'1970-01-01').TotalSeconds)
+        $offBy = if ($epochText -match '^[0-9]+$') { [Math]::Abs([int64]$epochText - $now) } else { 99999 }
+
+        $fail = @()
+        if ($hasSync -ne 'yes') { $fail += 'ไม่มี timeSync.js' }
+        if ($sudoOk -ne 'yes') { $fail += 'สิทธิ์ตั้งเวลาใช้ไม่ได้' }
+        if ($online -lt 1) { $fail += 'pm2 ไม่ online' }
+        if ($offBy -gt 60) { $fail += "เวลาต่าง $offBy วินาที" }
+        if ($tz -notmatch '\+0700') { $fail += "timezone ไม่ใช่ +07 ($tz)" }
+        if ($http -and $http -ne '200') { $fail += "ต่อ Center ไม่ได้ (HTTP $http)" }
+
+        if ($fail.Count -eq 0) {
+            Write-Host ("[{0,2}/{1}] {2,-16} พร้อมใช้งาน" -f $n, $Hosts.Count, $h) -ForegroundColor Green
+        } else {
+            Write-Host ("[{0,2}/{1}] {2,-16} ยังไม่พร้อม: {3}" -f $n, $Hosts.Count, $h, ($fail -join ', ')) -ForegroundColor Red
+            $problems += $h
+        }
+        Write-Host ("                  เวลาต่าง {0} วิ   {1}   pm2 online {2}   Center HTTP {3}   เคยซิงก์ {4} ครั้ง" -f
+            $offBy, $tz, $online, $(if ($http) { $http } else { '-' }), $(if ($syncCount) { $syncCount } else { '0' }))
+        if ($lastLog) { Write-Host ("                  {0}" -f $lastLog) -ForegroundColor DarkGray }
+    } elseif ($Apply) {
         $files = (& $get 'FILES').Trim()
         $sudoers = & $get 'SUDOERS'
         $online = [int](& $get 'PM2')
@@ -255,13 +383,18 @@ foreach ($h in $Hosts) {
 Write-Host ''
 if ($problems.Count -gt 0) {
     Write-Host "ต้องดูเพิ่ม $($problems.Count) ตัว: $(($problems | Select-Object -Unique) -join ', ')" -ForegroundColor Yellow
-    if (-not $Apply) {
+    if (-not $Apply -and -not $Verify) {
         Write-Host 'ไฟล์ที่แก้ไว้เองจะไม่ถูกแตะ ยกเว้นเป็นหนึ่งใน 3 ไฟล์ข้างบน - ตรวจก่อนสั่ง -Apply' -ForegroundColor Yellow
     }
 } else {
     Write-Host 'ทุกตัวเรียบร้อย' -ForegroundColor Green
 }
-if (-not $Apply) {
+if (-not $Apply -and -not $Verify) {
     Write-Host ''
-    Write-Host 'พอใจแล้วสั่ง: .\fleet-timesync.ps1 -Apply' -ForegroundColor Cyan
+    Write-Host 'พอใจแล้วสั่ง: .leet-timesync.ps1 -Apply' -ForegroundColor Cyan
+}
+if ($Apply) {
+    Write-Host ''
+    Write-Host 'ตรวจผล:     .leet-timesync.ps1 -Verify' -ForegroundColor Cyan
+    Write-Host 'พิสูจน์จริง: .leet-timesync.ps1 -TestSelfHeal -Hosts <ip ตัวเดียว>' -ForegroundColor Cyan
 }
