@@ -59,6 +59,8 @@ $Cameras = @(
     '10.11.181.45'
     '10.11.181.47'
     '10.11.181.49'
+    '10.15.161.21'
+    '10.15.161.22'
 ) | Select-Object -Unique
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
