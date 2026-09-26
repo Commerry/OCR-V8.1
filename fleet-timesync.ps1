@@ -102,6 +102,8 @@ $remoteDir = $AppDir -replace '^~', '$HOME'
 # ---------------------------------------------------------------- status ----
 # Reads only: git state, what this site has modified, the clock, the sudo rule.
 $statusScript = @"
+export PATH="`$PATH:/usr/local/bin:/usr/bin:`$HOME/.npm-global/bin"
+for d in "`$HOME"/.nvm/versions/node/*/bin; do [ -d "`$d" ] && PATH="`$PATH:`$d"; done
 # Find the program even when it is not where we expect - several cameras were
 # installed to a different path.
 DIR=$remoteDir
@@ -134,6 +136,8 @@ echo PM2 `$(pm2 list 2>/dev/null | grep -c online)
 # Checks out the listed paths and nothing else - config.json and the web pages
 # are never in that list.
 $applyScript = @"
+export PATH="`$PATH:/usr/local/bin:/usr/bin:`$HOME/.npm-global/bin"
+for d in "`$HOME"/.nvm/versions/node/*/bin; do [ -d "`$d" ] && PATH="`$PATH:`$d"; done
 DIR=$remoteDir
 [ -d "`$DIR" ] || DIR=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
 [ -d "`$DIR" ] || DIR=`$(ls -d `$HOME/Desktop/OCR* `$HOME/OCR* 2>/dev/null | head -1)
@@ -159,15 +163,23 @@ echo FILES `$(git diff --cached --name-only | tr '
 echo '$Password' | sudo -S bash tools/install-timesync-sudoers.sh $User >/tmp/ts-sudo.log 2>&1
 echo SUDOERS `$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
 
-pm2 restart $Pm2Name >/dev/null 2>&1
-sleep 4
-ONLINE=`$(pm2 list 2>/dev/null | grep -c online)
-echo PM2 `$ONLINE
-# a program that will not come back up gets its old file returned
-if [ "`$ONLINE" = "0" ]; then
-    cp -a /tmp/centralReporter.bak.js src/utils/centralReporter.js 2>/dev/null
+if ! command -v pm2 >/dev/null 2>&1; then
+    echo PM2 unavailable
+    echo NOTE ไม่พบคำสั่ง pm2 - ไฟล์อัปแล้วแต่ต้อง restart เอง
+else
     pm2 restart $Pm2Name >/dev/null 2>&1
-    echo ROLLEDBACK yes
+    sleep 6
+    STATUS=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'status' | grep -o 'online\|errored\|stopped\|launching')
+    echo PM2 `$STATUS
+    # only a program that really failed gets its old file back
+    if [ "`$STATUS" != "online" ] && [ "`$STATUS" != "launching" ]; then
+        echo WHY `$(pm2 logs $Pm2Name --err --lines 5 --nostream 2>/dev/null | tail -3 | tr '
+' ' ' | cut -c1-200)
+        cp -a /tmp/centralReporter.bak.js src/utils/centralReporter.js 2>/dev/null
+        rm -f src/utils/timeSync.js
+        pm2 restart $Pm2Name >/dev/null 2>&1
+        echo ROLLEDBACK yes
+    fi
 fi
 echo TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')
 "@
@@ -177,6 +189,8 @@ echo TIME `$(date '+%Y-%m-%d %H:%M:%S %Z')
 # real, the clock is compared against this PC, and the program's own log is
 # checked for a sync having happened.
 $verifyScript = @"
+export PATH="`$PATH:/usr/local/bin:/usr/bin:`$HOME/.npm-global/bin"
+for d in "`$HOME"/.nvm/versions/node/*/bin; do [ -d "`$d" ] && PATH="`$PATH:`$d"; done
 DIR=$remoteDir
 [ -d "`$DIR" ] || DIR=`$(pm2 describe $Pm2Name 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
 [ -d "`$DIR" ] || DIR=`$(ls -d `$HOME/Desktop/OCR* `$HOME/OCR* 2>/dev/null | head -1)
@@ -228,7 +242,7 @@ echo LASTLOG `$(grep -h timeSync logs/*.log `$HOME/.pm2/logs/*out*.log 2>/dev/nu
 
 $mode = if ($Apply) { 'apply' } elseif ($Verify) { 'verify' } elseif ($TestSelfHeal) { 'self-heal test' } else { 'status' }
 Write-Host ''
-Write-Host "=== ffleet-timesync ($mode) - กล้อง $($Hosts.Count) ตัว ===" -ForegroundColor Cyan
+Write-Host "=== fleet-timesync ($mode) - กล้อง $($Hosts.Count) ตัว ===" -ForegroundColor Cyan
 if ($Apply) {
     Write-Host 'จะดึงมาเฉพาะไฟล์เหล่านี้ ไฟล์อื่นคงเดิมทั้งหมด:' -ForegroundColor Yellow
     $FILES | ForEach-Object { Write-Host "   $_" -ForegroundColor Yellow }
@@ -296,6 +310,7 @@ foreach ($h in $Hosts) {
         $sudoOk = & $get 'SUDOOK'
         $tz = & $get 'TZ'
         $online = [int](& $get 'PM2')
+        if ($online -lt 1) { $online = if ((& $get 'PM2').Trim() -eq 'online') { 1 } else { 0 } }
         $syncCount = (& $get 'SYNCCOUNT').Trim()
         $lastLog = & $get 'SYNCLOG'
         $http = (& $get 'CENTRALHTTP').Trim()
@@ -323,17 +338,24 @@ foreach ($h in $Hosts) {
     } elseif ($Apply) {
         $files = (& $get 'FILES').Trim()
         $sudoers = & $get 'SUDOERS'
-        $online = [int](& $get 'PM2')
+        $pm2 = (& $get 'PM2').Trim()
         $rolled = & $get 'ROLLEDBACK'
+        $why = & $get 'WHY'
+        $note = & $get 'NOTE'
         $time = & $get 'TIME'
+        $online = if ($pm2 -eq 'online' -or $pm2 -eq 'launching') { 1 } else { 0 }
         if ($rolled -eq 'yes') {
-            Write-Host ("[{0,2}/{1}] {2,-16} โปรแกรมไม่ขึ้นหลังเปลี่ยนไฟล์ - คืนไฟล์เดิมให้แล้ว" -f $n, $Hosts.Count, $h) -ForegroundColor Red
+            Write-Host ("[{0,2}/{1}] {2,-16} โปรแกรมไม่ขึ้นหลังเปลี่ยนไฟล์ - คืนไฟล์เดิมให้แล้ว (pm2: {3})" -f $n, $Hosts.Count, $h, $pm2) -ForegroundColor Red
+            if ($why) { Write-Host ("                  สาเหตุ: {0}" -f $why) -ForegroundColor DarkYellow }
+            $problems += $h
+        } elseif ($note) {
+            Write-Host ("[{0,2}/{1}] {2,-16} อัปไฟล์แล้ว แต่ {3}" -f $n, $Hosts.Count, $h, $note) -ForegroundColor Yellow
             $problems += $h
         } elseif ($sudoers -eq 'yes' -and $online -gt 0) {
             Write-Host ("[{0,2}/{1}] {2,-16} อัปเดตแล้ว: {3}" -f $n, $Hosts.Count, $h, $files) -ForegroundColor Green
-            Write-Host ("                  สิทธิ์ตั้งเวลา: yes   pm2 online: {0}   เวลา: {1}" -f $online, $time)
+            Write-Host ("                  สิทธิ์ตั้งเวลา: yes   pm2: {0}   เวลา: {1}" -f $pm2, $time)
         } else {
-            Write-Host ("[{0,2}/{1}] {2,-16} อัปไฟล์แล้วแต่ยังไม่ครบ (สิทธิ์={3} online={4})" -f $n, $Hosts.Count, $h, $sudoers, $online) -ForegroundColor Yellow
+            Write-Host ("[{0,2}/{1}] {2,-16} อัปไฟล์แล้วแต่ยังไม่ครบ (สิทธิ์={3} pm2={4})" -f $n, $Hosts.Count, $h, $sudoers, $pm2) -ForegroundColor Yellow
             $problems += $h
         }
     } else {
