@@ -30,6 +30,8 @@ param(
     [switch] $SetTimeOnly,
     [int]    $ImagesDays = 0,
     [switch] $Restart,
+    [string[]] $Hosts,
+    [string] $HostFile,
     [string] $User = 'pi',
     [string] $TimeZone = 'Asia/Bangkok',
     [string] $Password = 'raspberry',
@@ -62,6 +64,15 @@ $Cameras = @(
     '10.15.161.21'
     '10.15.161.22'
 ) | Select-Object -Unique
+
+# -Hosts / -HostFile narrow the run to specific cameras; without them the whole
+# fleet above is used
+if ($HostFile -and (Test-Path $HostFile)) {
+    $Hosts = Get-Content $HostFile | ForEach-Object { ($_ -split '#')[0].Trim() } | Where-Object { $_ }
+}
+if ($Hosts -and $Hosts.Count -gt 0) {
+    $Cameras = $Hosts | Select-Object -Unique
+}
 
 $here = Split-Path -Parent $MyInvocation.MyCommand.Path
 $cleaner = Join-Path $here 'clean-fleet.ps1'

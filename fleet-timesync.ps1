@@ -17,9 +17,9 @@
   (ซึ่งการอัปเดตอาจทับ) เวลาและ timezone ปัจจุบัน และติดตั้งสิทธิ์ตั้งเวลาแล้วหรือยัง
 
 .EXAMPLE
-  .\fleet-timesync.ps1 -Status     # ดูอย่างเดียว ไม่แก้อะไร
-  .\fleet-timesync.ps1 -Apply      # อัปเดตเฉพาะ 3 ไฟล์ + ตั้งสิทธิ์ + restart
-  .\fleet-timesync.ps1 -Apply -Hosts 10.11.181.47,10.11.181.49
+  .\ffleet-timesync.ps1 -Status     # ดูอย่างเดียว ไม่แก้อะไร
+  .\ffleet-timesync.ps1 -Apply      # อัปเดตเฉพาะ 3 ไฟล์ + ตั้งสิทธิ์ + restart
+  .\ffleet-timesync.ps1 -Apply -Hosts 10.11.181.47,10.11.181.49
 #>
 [CmdletBinding(DefaultParameterSetName = 'Status')]
 param(
@@ -228,7 +228,7 @@ echo LASTLOG `$(grep -h timeSync logs/*.log `$HOME/.pm2/logs/*out*.log 2>/dev/nu
 
 $mode = if ($Apply) { 'apply' } elseif ($Verify) { 'verify' } elseif ($TestSelfHeal) { 'self-heal test' } else { 'status' }
 Write-Host ''
-Write-Host "=== fleet-timesync ($mode) - กล้อง $($Hosts.Count) ตัว ===" -ForegroundColor Cyan
+Write-Host "=== ffleet-timesync ($mode) - กล้อง $($Hosts.Count) ตัว ===" -ForegroundColor Cyan
 if ($Apply) {
     Write-Host 'จะดึงมาเฉพาะไฟล์เหล่านี้ ไฟล์อื่นคงเดิมทั้งหมด:' -ForegroundColor Yellow
     $FILES | ForEach-Object { Write-Host "   $_" -ForegroundColor Yellow }
@@ -392,10 +392,10 @@ if ($problems.Count -gt 0) {
 }
 if (-not $Apply -and -not $Verify) {
     Write-Host ''
-    Write-Host 'พอใจแล้วสั่ง: .leet-timesync.ps1 -Apply' -ForegroundColor Cyan
+    Write-Host 'พอใจแล้วสั่ง: .\fleet-timesync.ps1 -Apply' -ForegroundColor Cyan
 }
 if ($Apply) {
     Write-Host ''
-    Write-Host 'ตรวจผล:     .leet-timesync.ps1 -Verify' -ForegroundColor Cyan
-    Write-Host 'พิสูจน์จริง: .leet-timesync.ps1 -TestSelfHeal -Hosts <ip ตัวเดียว>' -ForegroundColor Cyan
+    Write-Host 'ตรวจผล:     .\fleet-timesync.ps1 -Verify' -ForegroundColor Cyan
+    Write-Host 'พิสูจน์จริง: .\fleet-timesync.ps1 -TestSelfHeal -Hosts <ip ตัวเดียว>' -ForegroundColor Cyan
 }
