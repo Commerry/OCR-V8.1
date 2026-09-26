@@ -17,9 +17,9 @@
   (ซึ่งการอัปเดตอาจทับ) เวลาและ timezone ปัจจุบัน และติดตั้งสิทธิ์ตั้งเวลาแล้วหรือยัง
 
 .EXAMPLE
-  .\ffleet-timesync.ps1 -Status     # ดูอย่างเดียว ไม่แก้อะไร
-  .\ffleet-timesync.ps1 -Apply      # อัปเดตเฉพาะ 3 ไฟล์ + ตั้งสิทธิ์ + restart
-  .\ffleet-timesync.ps1 -Apply -Hosts 10.11.181.47,10.11.181.49
+  .\fleet-timesync.ps1 -Status     # ดูอย่างเดียว ไม่แก้อะไร
+  .\fleet-timesync.ps1 -Apply      # อัปเดตเฉพาะ 3 ไฟล์ + ตั้งสิทธิ์ + restart
+  .\fleet-timesync.ps1 -Apply -Hosts 10.11.181.47,10.11.181.49
 #>
 [CmdletBinding(DefaultParameterSetName = 'Status')]
 param(
