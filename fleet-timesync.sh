@@ -22,6 +22,8 @@
 #   -d DIR        program folder on a camera  (found via pm2 when missing)
 #   -n NAME       pm2 process name            (default: ocr)
 #   -f FILE       read hosts from a file
+#   --with-deps   also carry systemHealth.js and ocrRunner.js to a camera
+#                 whose program is old enough to be missing them
 # ---------------------------------------------------------------------------
 set -u
 
@@ -30,6 +32,7 @@ PASSWORD="raspberry"
 APP_DIR='$HOME/Desktop/OCR-V8.1'
 PM2_NAME="ocr"
 MODE="status"
+WITH_DEPS=0
 HOSTS=()
 
 FILES="src/utils/timeSync.js src/utils/centralReporter.js tools/install-timesync-sudoers.sh"
@@ -43,6 +46,7 @@ while [ $# -gt 0 ]; do
         --apply)      MODE="apply"; shift ;;
         --verify)     MODE="verify"; shift ;;
         --setup-keys) MODE="keys"; shift ;;
+        --with-deps)  WITH_DEPS=1; shift ;;
         -u) SSH_USER="$2"; shift 2 ;;
         -p) PASSWORD="$2"; shift 2 ;;
         -d) APP_DIR="$2"; shift 2 ;;
@@ -168,8 +172,10 @@ echo TARGETDIRTY \$(git status --porcelain -- $FILES 2>/dev/null | grep -v '^??'
         # updated regardless of its network.
         script="$(remote_prelude)
 echo DIR \$DIR
-[ -f src/utils/systemHealth.js ] || { echo ERRDEPS; exit 1; }
-grep -q getRecentReads src/ocrRunner.js 2>/dev/null || { echo ERRDEPS; exit 1; }
+if [ "$WITH_DEPS" != "1" ]; then
+    [ -f src/utils/systemHealth.js ] || { echo ERRDEPS; exit 1; }
+    grep -q getRecentReads src/ocrRunner.js 2>/dev/null || { echo ERRDEPS; exit 1; }
+fi
 cp -a src/utils/centralReporter.js /tmp/centralReporter.bak.js 2>/dev/null
 if [ -d .git ]; then
     git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
@@ -200,7 +206,9 @@ echo SYNCED \$(grep -h -c timeSync logs/*.log \$HOME/.pm2/logs/*out*.log 2>/dev/
         remote_dir=$(get DIR)
         if [ -n "$remote_dir" ] && ! echo "$out" | grep -q '^GOTFILES '; then
             copied=yes
-            for f in $FILES; do
+            send="$FILES"
+            [ "$WITH_DEPS" = 1 ] && send="$send src/utils/systemHealth.js src/ocrRunner.js"
+            for f in $send; do
                 ssh_key "$h" "mkdir -p \$(dirname '$remote_dir/$f')" >/dev/null 2>&1
                 scp $SSH_OPTS $KEY_OPTS -q "$f" "$SSH_USER@$h:$remote_dir/$f" 2>/dev/null || copied=no
             done
