@@ -143,28 +143,22 @@ echo HASRUNNER \$(grep -c getRecentReads src/ocrRunner.js 2>/dev/null || echo 0)
 echo TARGETDIRTY \$(git status --porcelain -- $FILES 2>/dev/null | grep -v '^??' | wc -l)"
         ;;
     apply)
+        # Step one only fetches the files. Cameras that cannot reach GitHub -
+        # no git repo, or a proxy that breaks the fetch - get the same files
+        # copied straight from this machine instead, so every camera can be
+        # updated regardless of its network.
         script="$(remote_prelude)
-[ -d .git ] || { echo ERRNOGIT; exit 1; }
+echo DIR \$DIR
 [ -f src/utils/systemHealth.js ] || { echo ERRDEPS; exit 1; }
 grep -q getRecentReads src/ocrRunner.js 2>/dev/null || { echo ERRDEPS; exit 1; }
 cp -a src/utils/centralReporter.js /tmp/centralReporter.bak.js 2>/dev/null
-git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
-git fetch origin main >/tmp/ts.log 2>&1 || git -c http.sslVerify=false fetch origin main >/tmp/ts.log 2>&1 || { echo ERRFETCH; exit 1; }
-git checkout origin/main -- $FILES || { echo ERRCHECKOUT; exit 1; }
-echo FILES \$(git diff --cached --name-only | tr '\\n' ' ')
-echo '$PASSWORD' | sudo -S bash tools/install-timesync-sudoers.sh $SSH_USER >/tmp/ts-sudo.log 2>&1
-echo SUDOERS \$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
-pm2 restart $PM2_NAME >/dev/null 2>&1
-sleep 5
-STATUS=\$(pm2 describe $PM2_NAME 2>/dev/null | grep -m1 status | grep -o 'online\\|errored\\|stopped\\|launching')
-echo PM2 \$STATUS
-if [ \"\$STATUS\" != online ] && [ \"\$STATUS\" != launching ]; then
-    cp -a /tmp/centralReporter.bak.js src/utils/centralReporter.js 2>/dev/null
-    rm -f src/utils/timeSync.js
-    pm2 restart $PM2_NAME >/dev/null 2>&1
-    echo ROLLEDBACK yes
+if [ -d .git ]; then
+    git config --global http.sslCAInfo /etc/ssl/certs/ca-certificates.crt 2>/dev/null || true
+    if git fetch origin main >/tmp/ts.log 2>&1 || git -c http.sslVerify=false fetch origin main >/tmp/ts.log 2>&1; then
+        git checkout origin/main -- $FILES && echo GOTFILES git
+    fi
 fi
-echo TIME \$(date '+%Y-%m-%d %H:%M:%S %Z')"
+[ -f src/utils/timeSync.js ] || echo NEEDFILES yes"
         ;;
     verify)
         script="$(remote_prelude)
@@ -180,6 +174,48 @@ echo SYNCED \$(grep -h -c timeSync logs/*.log \$HOME/.pm2/logs/*out*.log 2>/dev/
     if [ -f "$KEY" ]; then out=$(ssh_key "$h" "$script"); else out=$(ssh_pw "$h" "$script"); fi
     get() { echo "$out" | grep -m1 "^$1 " | cut -d' ' -f2-; }
 
+    # Cameras that cannot reach GitHub - no git repo, or a proxy that breaks
+    # the fetch - get the same files copied straight from this machine, so the
+    # network a camera happens to have does not decide whether it can be fixed.
+    if [ "$MODE" = apply ] && ! echo "$out" | grep -qE 'ERRDIR|ERRDEPS'; then
+        remote_dir=$(get DIR)
+        if [ -n "$remote_dir" ] && ! echo "$out" | grep -q '^GOTFILES '; then
+            copied=yes
+            for f in $FILES; do
+                ssh_key "$h" "mkdir -p \$(dirname '$remote_dir/$f')" >/dev/null 2>&1
+                scp $SSH_OPTS $KEY_OPTS -q "$f" "$SSH_USER@$h:$remote_dir/$f" 2>/dev/null || copied=no
+            done
+            if [ "$copied" = yes ]; then out="$out
+GOTFILES copy"; else out="$out
+ERRCOPY yes"; fi
+        fi
+
+        if echo "$out" | grep -q '^GOTFILES '; then
+            finish="$(remote_prelude)
+echo '$PASSWORD' | sudo -S bash tools/install-timesync-sudoers.sh $SSH_USER >/tmp/ts-sudo.log 2>&1
+echo SUDOERS \$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
+pm2 restart $PM2_NAME >/dev/null 2>&1
+STATUS=
+for i in 1 2 3 4 5 6 7 8; do
+    sleep 2
+    STATUS=\$(pm2 describe $PM2_NAME 2>/dev/null | grep -m1 'status' | grep -o 'online\\|errored\\|stopped\\|launching')
+    [ \"\$STATUS\" = online ] && break
+done
+echo PM2 \$STATUS
+if [ \"\$STATUS\" != online ]; then
+    echo WHY \$(pm2 logs $PM2_NAME --err --lines 8 --nostream 2>/dev/null | tail -3 | tr '\\n' ' ' | cut -c1-200)
+    cp -a /tmp/centralReporter.bak.js src/utils/centralReporter.js 2>/dev/null
+    rm -f src/utils/timeSync.js
+    pm2 restart $PM2_NAME >/dev/null 2>&1
+    echo ROLLEDBACK yes
+fi
+echo TIME \$(date '+%Y-%m-%d %H:%M:%S %Z')"
+            if [ -f "$KEY" ]; then more=$(ssh_key "$h" "$finish"); else more=$(ssh_pw "$h" "$finish"); fi
+            out="$out
+$more"
+        fi
+    fi
+
     # A camera that answers nothing at all is a failure, not a pass - the
     # PowerShell version reported unreachable hosts as healthy until it
     # required a known line in the reply.
@@ -188,7 +224,7 @@ echo SYNCED \$(grep -h -c timeSync logs/*.log \$HOME/.pm2/logs/*out*.log 2>/dev/
         apply)  marker=TIME ;;
         verify) marker=EPOCH ;;
     esac
-    if echo "$out" | grep -qE 'ERRDIR|ERRNOGIT|ERRDEPS|ERRFETCH|ERRCHECKOUT' \
+    if echo "$out" | grep -qE 'ERRDIR|ERRDEPS|ERRCOPY' \
        || ! echo "$out" | grep -q "^$marker "; then
         reason=$(echo "$out" | grep -v '^[[:space:]]*$' | tail -1 | cut -c1-70)
         printf '%-16s ปัญหา: %s\n' "$h" "${reason:-ไม่มีคำตอบจากเครื่อง}"
@@ -205,9 +241,12 @@ echo SYNCED \$(grep -h -c timeSync logs/*.log \$HOME/.pm2/logs/*out*.log 2>/dev/
         ;;
     apply)
         if [ "$(get ROLLEDBACK)" = yes ]; then
-            printf '%-16s โปรแกรมไม่ขึ้น - คืนไฟล์เดิมแล้ว\n' "$h"; bad=$((bad + 1))
+            printf '%-16s โปรแกรมไม่ขึ้น (pm2 %s) - คืนไฟล์เดิมแล้ว\n' "$h" "$(get PM2)"
+            [ -n "$(get WHY)" ] && printf '                 สาเหตุ: %s\n' "$(get WHY)"
+            bad=$((bad + 1))
         else
-            printf '%-16s อัปเดตแล้ว (สิทธิ์ %s, pm2 %s, เวลา %s)\n' "$h" "$(get SUDOERS)" "$(get PM2)" "$(get TIME)"
+            printf '%-16s อัปเดตแล้ว [ไฟล์มาจาก %s] (สิทธิ์ %s, pm2 %s, เวลา %s)\n' \
+                "$h" "$(get GOTFILES)" "$(get SUDOERS)" "$(get PM2)" "$(get TIME)"
             ok=$((ok + 1))
         fi
         ;;
