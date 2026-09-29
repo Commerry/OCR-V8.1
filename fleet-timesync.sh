@@ -109,6 +109,18 @@ export PATH="\$PATH:/usr/local/bin:/usr/bin:/usr/local/lib/npm/bin:\$HOME/.npm-g
 for d in "\$HOME"/.nvm/versions/node/*/bin /opt/node*/bin /usr/local/n/versions/node/*/bin; do
     [ -d "\$d" ] && PATH="\$PATH:\$d"
 done
+# pm2 is a node script: without node on PATH it fails with
+# "/usr/bin/env: 'node': No such file or directory" and every pm2 call quietly
+# does nothing. Find node first, then pm2.
+NODE=\$(command -v node 2>/dev/null)
+if [ -z "\$NODE" ]; then
+    for c in /usr/local/bin/node /usr/bin/node /opt/nodejs/bin/node              \$HOME/.nvm/versions/node/*/bin/node /opt/node*/bin/node              /usr/local/n/versions/node/*/bin/node \$HOME/.local/bin/node; do
+        [ -x "\$c" ] && { NODE="\$c"; break; }
+    done
+fi
+[ -n "\$NODE" ] && PATH="\$(dirname "\$NODE"):\$PATH"
+echo NODEBIN \${NODE:-none}
+
 # pm2 turns up in different places depending on how node was installed on each
 # camera; find the binary rather than trusting PATH alone
 PM2=\$(command -v pm2 2>/dev/null)
@@ -118,7 +130,9 @@ if [ -z "\$PM2" ]; then
     done
 fi
 [ -n "\$PM2" ] || PM2=pm2
-pm2() { "\$PM2" "\$@"; }
+pm2() {
+    if [ -n "\$NODE" ] && [ -f "\$PM2" ]; then "\$NODE" "\$PM2" "\$@"; else "\$PM2" "\$@"; fi
+}
 echo PM2BIN \$PM2
 DIR=$APP_DIR
 [ -d "\$DIR" ] || DIR=\$(pm2 describe $PM2_NAME 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
