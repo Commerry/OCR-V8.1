@@ -105,8 +105,21 @@ ssh_key() { # ssh using the key, for everything afterwards
 
 remote_prelude() {
     cat <<PRELUDE
-export PATH="\$PATH:/usr/local/bin:/usr/bin:\$HOME/.npm-global/bin"
-for d in "\$HOME"/.nvm/versions/node/*/bin; do [ -d "\$d" ] && PATH="\$PATH:\$d"; done
+export PATH="\$PATH:/usr/local/bin:/usr/bin:/usr/local/lib/npm/bin:\$HOME/.npm-global/bin:\$HOME/.local/bin:\$HOME/bin"
+for d in "\$HOME"/.nvm/versions/node/*/bin /opt/node*/bin /usr/local/n/versions/node/*/bin; do
+    [ -d "\$d" ] && PATH="\$PATH:\$d"
+done
+# pm2 turns up in different places depending on how node was installed on each
+# camera; find the binary rather than trusting PATH alone
+PM2=\$(command -v pm2 2>/dev/null)
+if [ -z "\$PM2" ]; then
+    for c in /usr/local/bin/pm2 /usr/bin/pm2 \$HOME/.npm-global/bin/pm2              \$HOME/.nvm/versions/node/*/bin/pm2 /opt/node*/bin/pm2              \$HOME/node_modules/.bin/pm2 ./node_modules/.bin/pm2; do
+        [ -x "\$c" ] && { PM2="\$c"; break; }
+    done
+fi
+[ -n "\$PM2" ] || PM2=pm2
+pm2() { "\$PM2" "\$@"; }
+echo PM2BIN \$PM2
 DIR=$APP_DIR
 [ -d "\$DIR" ] || DIR=\$(pm2 describe $PM2_NAME 2>/dev/null | grep -m1 'exec cwd' | sed 's/.*│ *//;s/ *│.*//')
 [ -d "\$DIR" ] || DIR=\$(ls -d \$HOME/Desktop/OCR* \$HOME/OCR* 2>/dev/null | head -1)
