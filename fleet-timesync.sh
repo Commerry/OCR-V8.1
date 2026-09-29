@@ -307,6 +307,7 @@ $more"
             printf '%-16s โปรแกรมไม่ขึ้น (app %s, pm2 %s, ไบนารี %s) - คืนไฟล์เดิมแล้ว\n' \
                 "$h" "$(get APP)" "$(get PM2)" "$(get PM2BIN)"
             [ -n "$(get WHY)" ] && printf '                 สาเหตุ: %s\n' "$(get WHY)"
+            [ -n "$(get PM2RAW)" ] && printf '                 pm2 list: %s\n' "$(get PM2RAW)"
             bad=$((bad + 1))
         else
             printf '%-16s อัปเดตแล้ว [ไฟล์มาจาก %s] (สิทธิ์ %s, app %s=%s, เวลา %s)\n' \
