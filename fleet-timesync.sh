@@ -204,7 +204,15 @@ echo TIMESYNC \$([ -f src/utils/timeSync.js ] && echo yes || echo no)
 echo SUDOOK \$(sudo -n timedatectl show -p Timezone --value >/dev/null 2>&1 && echo yes || echo no)
 echo EPOCH \$(date +%s)
 echo TZ \$(date '+%z')
-echo PM2 \$(pm2 describe "\$APP" 2>/dev/null | grep -m1 status | grep -o 'online\\|errored\\|stopped')
+echo PM2 \$(APP=\"\$APP\" pm2 jlist 2>/dev/null | node -e '
+    let s = "";
+    process.stdin.on("data", (d) => { s += d; }).on("end", () => {
+      try {
+        const apps = JSON.parse(s);
+        const a = apps.find((x) => x.name === process.env.APP) || apps[0];
+        console.log(a && a.pm2_env ? a.pm2_env.status : "");
+      } catch (e) { console.log(""); }
+    });' 2>/dev/null)
 echo SYNCED \$(grep -h -c timeSync logs/*.log \$HOME/.pm2/logs/*out*.log 2>/dev/null | paste -sd+ | bc 2>/dev/null || echo 0)"
         ;;
     esac
@@ -235,13 +243,28 @@ ERRCOPY yes"; fi
 echo '$PASSWORD' | sudo -S bash tools/install-timesync-sudoers.sh $SSH_USER >/tmp/ts-sudo.log 2>&1
 echo SUDOERS \$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
 pm2 restart "\$APP" >/dev/null 2>&1
+pm2_status() {
+    # from pm2's own JSON: the table it prints is decorated and does not grep
+    # the same way on every camera, which made healthy apps look dead
+    APP=\"\$1\" pm2 jlist 2>/dev/null | node -e '
+        let s = "";
+        process.stdin.on("data", (d) => { s += d; }).on("end", () => {
+          try {
+            const apps = JSON.parse(s);
+            const a = apps.find((x) => x.name === process.env.APP) || apps[0];
+            console.log(a && a.pm2_env ? a.pm2_env.status : "");
+          } catch (e) { console.log(""); }
+        });' 2>/dev/null
+}
 STATUS=
 for i in 1 2 3 4 5 6 7 8; do
     sleep 2
-    STATUS=\$(pm2 describe "\$APP" 2>/dev/null | grep -m1 'status' | grep -o 'online\\|errored\\|stopped\\|launching')
+    STATUS=\$(pm2_status \"\$APP\")
+    [ -n \"\$STATUS\" ] || STATUS=\$(pm2 describe \"\$APP\" 2>/dev/null | grep -m1 'status' | grep -o 'online\\|errored\\|stopped\\|launching')
     [ \"\$STATUS\" = online ] && break
 done
 echo PM2 \$STATUS
+echo PM2RAW \$(pm2 list 2>&1 | grep -m1 \"\$APP\" | tr -s ' ' | cut -c1-90)
 if [ \"\$STATUS\" != online ]; then
     echo WHY \$(pm2 logs "\$APP" --err --lines 8 --nostream 2>/dev/null | tail -3 | tr '\\n' ' ' | cut -c1-200)
     cp -a /tmp/centralReporter.bak.js src/utils/centralReporter.js 2>/dev/null
