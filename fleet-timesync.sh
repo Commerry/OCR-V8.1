@@ -108,6 +108,25 @@ DIR=$APP_DIR
 [ -d "\$DIR" ] || DIR=\$(ls -d \$HOME/Desktop/OCR* \$HOME/OCR* 2>/dev/null | head -1)
 [ -d "\$DIR" ] || { echo ERRDIR; exit 1; }
 cd "\$DIR" || { echo ERRDIR; exit 1; }
+# The pm2 app is not called the same thing on every camera. Ask pm2 which app
+# runs from this folder rather than assuming a name - guessing it made four
+# cameras look dead and get rolled back while they were running fine.
+APP=$PM2_NAME
+if ! pm2 describe "\$APP" >/dev/null 2>&1; then
+    APP=\$(DIR="\$DIR" pm2 jlist 2>/dev/null | node -e '
+        let s = "";
+        process.stdin.on("data", (d) => { s += d; }).on("end", () => {
+          try {
+            const apps = JSON.parse(s);
+            const here = apps.find((a) => a.pm2_env && a.pm2_env.pm_cwd
+              && a.pm2_env.pm_cwd.indexOf(process.env.DIR) === 0);
+            const pick = here || apps[0];
+            if (pick) console.log(pick.name);
+          } catch (e) { /* no pm2 or bad json */ }
+        });' 2>/dev/null)
+fi
+[ -n "\$APP" ] || APP=$PM2_NAME
+echo APP \$APP
 PRELUDE
 }
 
@@ -166,7 +185,7 @@ echo TIMESYNC \$([ -f src/utils/timeSync.js ] && echo yes || echo no)
 echo SUDOOK \$(sudo -n timedatectl show -p Timezone --value >/dev/null 2>&1 && echo yes || echo no)
 echo EPOCH \$(date +%s)
 echo TZ \$(date '+%z')
-echo PM2 \$(pm2 describe $PM2_NAME 2>/dev/null | grep -m1 status | grep -o 'online\\|errored\\|stopped')
+echo PM2 \$(pm2 describe "\$APP" 2>/dev/null | grep -m1 status | grep -o 'online\\|errored\\|stopped')
 echo SYNCED \$(grep -h -c timeSync logs/*.log \$HOME/.pm2/logs/*out*.log 2>/dev/null | paste -sd+ | bc 2>/dev/null || echo 0)"
         ;;
     esac
@@ -194,19 +213,19 @@ ERRCOPY yes"; fi
             finish="$(remote_prelude)
 echo '$PASSWORD' | sudo -S bash tools/install-timesync-sudoers.sh $SSH_USER >/tmp/ts-sudo.log 2>&1
 echo SUDOERS \$([ -f /etc/sudoers.d/ocr-settime ] && echo yes || echo no)
-pm2 restart $PM2_NAME >/dev/null 2>&1
+pm2 restart "\$APP" >/dev/null 2>&1
 STATUS=
 for i in 1 2 3 4 5 6 7 8; do
     sleep 2
-    STATUS=\$(pm2 describe $PM2_NAME 2>/dev/null | grep -m1 'status' | grep -o 'online\\|errored\\|stopped\\|launching')
+    STATUS=\$(pm2 describe "\$APP" 2>/dev/null | grep -m1 'status' | grep -o 'online\\|errored\\|stopped\\|launching')
     [ \"\$STATUS\" = online ] && break
 done
 echo PM2 \$STATUS
 if [ \"\$STATUS\" != online ]; then
-    echo WHY \$(pm2 logs $PM2_NAME --err --lines 8 --nostream 2>/dev/null | tail -3 | tr '\\n' ' ' | cut -c1-200)
+    echo WHY \$(pm2 logs "\$APP" --err --lines 8 --nostream 2>/dev/null | tail -3 | tr '\\n' ' ' | cut -c1-200)
     cp -a /tmp/centralReporter.bak.js src/utils/centralReporter.js 2>/dev/null
     rm -f src/utils/timeSync.js
-    pm2 restart $PM2_NAME >/dev/null 2>&1
+    pm2 restart "\$APP" >/dev/null 2>&1
     echo ROLLEDBACK yes
 fi
 echo TIME \$(date '+%Y-%m-%d %H:%M:%S %Z')"
