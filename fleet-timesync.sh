@@ -281,12 +281,13 @@ $more"
         ;;
     apply)
         if [ "$(get ROLLEDBACK)" = yes ]; then
-            printf '%-16s โปรแกรมไม่ขึ้น (pm2 %s) - คืนไฟล์เดิมแล้ว\n' "$h" "$(get PM2)"
+            printf '%-16s โปรแกรมไม่ขึ้น (app %s, pm2 %s, ไบนารี %s) - คืนไฟล์เดิมแล้ว\n' \
+                "$h" "$(get APP)" "$(get PM2)" "$(get PM2BIN)"
             [ -n "$(get WHY)" ] && printf '                 สาเหตุ: %s\n' "$(get WHY)"
             bad=$((bad + 1))
         else
-            printf '%-16s อัปเดตแล้ว [ไฟล์มาจาก %s] (สิทธิ์ %s, pm2 %s, เวลา %s)\n' \
-                "$h" "$(get GOTFILES)" "$(get SUDOERS)" "$(get PM2)" "$(get TIME)"
+            printf '%-16s อัปเดตแล้ว [ไฟล์มาจาก %s] (สิทธิ์ %s, app %s=%s, เวลา %s)\n' \
+                "$h" "$(get GOTFILES)" "$(get SUDOERS)" "$(get APP)" "$(get PM2)" "$(get TIME)"
             ok=$((ok + 1))
         fi
         ;;
