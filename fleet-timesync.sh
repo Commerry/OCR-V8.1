@@ -84,9 +84,15 @@ chmod 700 "$ASKPASS"
 trap 'rm -f "$ASKPASS"' EXIT
 
 ssh_pw() { # ssh using the password, for the first contact with a camera
-    SSH_ASKPASS="$ASKPASS" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
-        setsid -w ssh $SSH_OPTS -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 \
-        "$SSH_USER@$1" "$2" 2>&1
+    if command -v setsid >/dev/null 2>&1; then
+        SSH_ASKPASS="$ASKPASS" SSH_ASKPASS_REQUIRE=force DISPLAY=:0 \
+            setsid -w ssh $SSH_OPTS -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 \
+            "$SSH_USER@$1" "$2" 2>&1
+    else
+        # no setsid (git-bash on Windows): let ssh ask on screen instead
+        ssh $SSH_OPTS -o PubkeyAuthentication=no -o NumberOfPasswordPrompts=1 \
+            "$SSH_USER@$1" "$2" 2>&1
+    fi
 }
 
 ssh_key() { # ssh using the key, for everything afterwards
