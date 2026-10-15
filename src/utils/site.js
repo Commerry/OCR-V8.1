@@ -23,13 +23,18 @@ const siteInfo = (config) => {
   return { code: pick('code'), title: pick('title'), company: pick('company') };
 };
 
-/** Fill {{SITE_CODE}}, {{SITE_TITLE}} and {{SITE_COMPANY}} into a page. */
-const applySite = (html, config) => {
+/**
+ * Fill {{SITE_CODE}}, {{SITE_TITLE}}, {{SITE_COMPANY}} and {{FIRMWARE_VERSION}}
+ * into a page. The version shown is the one running, so a technician at the
+ * camera can read it straight off the screen after an update.
+ */
+const applySite = (html, config, version = '') => {
   const site = siteInfo(config);
   return String(html)
     .replace(/\{\{SITE_CODE\}\}/g, escapeHtml(site.code))
     .replace(/\{\{SITE_TITLE\}\}/g, escapeHtml(site.title))
-    .replace(/\{\{SITE_COMPANY\}\}/g, escapeHtml(site.company));
+    .replace(/\{\{SITE_COMPANY\}\}/g, escapeHtml(site.company))
+    .replace(/\{\{FIRMWARE_VERSION\}\}/g, escapeHtml(version));
 };
 
 export { siteInfo, applySite, DEFAULTS };

@@ -18,6 +18,7 @@ import NetworkManager from './utils/network/NetworkManager';
 import { getSystemHealth } from './utils/systemHealth';
 import centralReporter from './utils/centralReporter';
 import { applySite } from './utils/site';
+import firmware from './utils/firmware';
 
 // Try to import HTML files, fallback to reading from filesystem
 let indexhtml;
@@ -104,7 +105,7 @@ const renderIndex = (cameraName, userRole = 'admin', user = null) => {
     user,
     ...config,
   };
-  let html = applySite(indexhtml.toString(), config);
+  let html = applySite(indexhtml.toString(), config, firmware.version);
   html = html.replace(
     'const state = {}',
     `const state = ${JSON.stringify(currentState)}`,
@@ -114,7 +115,13 @@ const renderIndex = (cameraName, userRole = 'admin', user = null) => {
 
 // Login page
 app.get('/login', (req, res) => {
-  res.send(applySite(loginhtml.toString(), config));
+  res.send(applySite(loginhtml.toString(), config, firmware.version));
+});
+
+// Which build is running. Public on purpose, like the center's /api/health:
+// checking an update should not need a password, and a version is no secret.
+app.get('/version', (req, res) => {
+  res.json({ ...firmware, uptimeSec: Math.round(process.uptime()) });
 });
 
 // Login handler

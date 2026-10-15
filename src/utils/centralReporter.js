@@ -1,5 +1,6 @@
 import os from 'os';
 import timeSync from './timeSync';
+import firmware from './firmware';
 import { getConfig } from './getConfig';
 import { getSystemHealth, getNetworkIdentity } from './systemHealth';
 import {
@@ -30,7 +31,8 @@ import {
  *     "mac": "dc:a6:32:aa:bb:cc",
  *     "interface": "eth0",
  *     "platform": "linux",
- *     "appVersion": "1.0.0"
+ *     "appVersion": "20261015-c401482",          // the build running (utils/firmware.js)
+ *     "firmware": { "version": "...", "sha": "c401482", "startedAt": "..." }
  *   },
  *   "cameras": [{
  *     "cameraName": "in",
@@ -82,15 +84,10 @@ const DEFAULT_SETTINGS = {
 
 let settings = { ...DEFAULT_SETTINGS };
 let timer = null;
-let appVersion = '0.0.0';
 let lastResult = { ok: null, at: null, status: null, error: null };
-
-try {
-  // eslint-disable-next-line global-require
-  appVersion = require('../../package.json').version || '0.0.0';
-} catch (e) {
-  // keep default
-}
+// the build that is running - fixed at start-up, so the center sees whether
+// an updated camera was really restarted onto the new code
+const appVersion = firmware.version;
 
 const buildPayload = async (includeImage) => {
   const config = getConfig();
@@ -134,6 +131,7 @@ const buildPayload = async (includeImage) => {
       interface: identity.interface,
       platform: process.platform,
       appVersion,
+      firmware: { version: firmware.version, sha: firmware.sha, startedAt: firmware.startedAt },
     },
     cameras,
     // one image per read - the central stores them for its reports.
