@@ -1,4 +1,9 @@
 {
+  "site": {
+    "code": "STA-SK",
+    "title": "OCR-STA-SK",
+    "company": "STGT"
+  },
   "cameraList": {
     "camera1": {
       "cameraName": "camera1",

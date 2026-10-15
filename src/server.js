@@ -17,6 +17,7 @@ import AuthManager from './auth/AuthManager';
 import NetworkManager from './utils/network/NetworkManager';
 import { getSystemHealth } from './utils/systemHealth';
 import centralReporter from './utils/centralReporter';
+import { applySite } from './utils/site';
 
 // Try to import HTML files, fallback to reading from filesystem
 let indexhtml;
@@ -103,7 +104,7 @@ const renderIndex = (cameraName, userRole = 'admin', user = null) => {
     user,
     ...config,
   };
-  let html = indexhtml.toString();
+  let html = applySite(indexhtml.toString(), config);
   html = html.replace(
     'const state = {}',
     `const state = ${JSON.stringify(currentState)}`,
@@ -113,7 +114,7 @@ const renderIndex = (cameraName, userRole = 'admin', user = null) => {
 
 // Login page
 app.get('/login', (req, res) => {
-  res.send(loginhtml.toString());
+  res.send(applySite(loginhtml.toString(), config));
 });
 
 // Login handler
