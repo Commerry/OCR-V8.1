@@ -2959,6 +2959,19 @@
     // Initialize socket connection
     const socket = io();
 
+    // A firmware update restarts the program and socket.io reconnects by
+    // itself - but the page on screen is still the one the old program
+    // served, so a display left open (the Android screen, a browser on the
+    // line) kept showing the old page until someone reloaded it. On every
+    // reconnect, ask which build answers now and reload when it changed.
+    const PAGE_VERSION = '{{FIRMWARE_VERSION}}';
+    socket.io.on('reconnect', () => {
+      fetch('/version', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((v) => { if (v && v.version && v.version !== PAGE_VERSION) window.location.reload(); })
+        .catch(() => {});
+    });
+
     const cameraSelect = document.getElementById("cameraSelect");
     const currentImagePreview = document.querySelector("#currentImagePreview");
     const lastImagePreview = document.querySelector("#lastImagePreview");
